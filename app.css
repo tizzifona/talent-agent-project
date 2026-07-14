@@ -86,6 +86,87 @@ header h1 {
   color: var(--text-primary);
 }
 
+.upload-area {
+  text-align: center;
+  padding: 40px 20px;
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-color);
+  margin-bottom: 20px;
+}
+
+.upload-area:hover {
+  border-color: var(--primary-color);
+  background: rgba(79, 70, 229, 0.05);
+}
+
+.upload-hint {
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.files-container {
+  margin-top: 20px;
+}
+
+.files-container h3 {
+  font-size: 1.1rem;
+  margin-bottom: 12px;
+}
+
+#uploaded-files {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--bg-color);
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.file-size {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.file-rows {
+  color: var(--primary-color);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.file-remove {
+  padding: 6px 12px;
+  background: var(--danger-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.file-remove:hover {
+  opacity: 0.8;
+}
+
 /* Database List */
 .database-list {
   display: grid;
