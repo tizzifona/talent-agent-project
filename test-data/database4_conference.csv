@@ -1,0 +1,8 @@
+registration_id,attendee_name,contact_email,phone_number,company_name,job_function
+C2024001,John Smith,johnsmith@email.com,+1 555 0101,TechCorp,Engineering
+C2024002,"Johnson, Sarah",s.johnson@company.com,(555) 0102,DataInc,Analytics
+C2024003,Michael Brown,mbrown@tech.io,555.0103,StartupXYZ,Executive
+C2024004,Robert Wilson,bob.wilson@corp.com,555-0105,BigCorp,Software Development
+C2024005,Amanda Williams,a.williams@sales.com,555-0109,SalesCo,Sales
+C2024006,Lisa Thompson,lisa.t@marketing.com,+1-555-0108,MarketingPro,Marketing
+C2024007,Jennifer M.,j.martinez@email.com,5550106,Agency Co,Design

@@ -1,0 +1,10 @@
+contact_uuid,first,last,email_primary,email_secondary,phone_mobile,phone_work,notes
+c001-uuid,John,Smith,john.smith@email.com,jsmith@techcorp.com,+1-555-0101,,LinkedIn contact from conference
+c002-uuid,Sarah,Johnson,sarah.johnson@email.com,s.johnson@company.com,555-0102,555-0102 ext 123,Met at TechSummit 2023
+c003-uuid,Michael,Brown,m.brown@tech.io,mbrown@tech.io,+1(555)0103,,CTO of StartupXYZ
+c004-uuid,Emily,Davis,emily.davis@gmail.com,emily.d@email.com,555.0104,,PM interested in our product
+c005-uuid,Robert,Wilson,r.wilson@corp.com,bob.wilson@corp.com,+15550105,,Senior dev at BigCorp
+c006-uuid,Jennifer,Martinez,jenny.m@email.com,jmartinez@agency.com,555-0106,,Designer - potential collaboration
+c007-uuid,Lisa,Thompson,l.thompson@company.com,lisa.t@marketing.com,555-0108,,Marketing lead
+c008-uuid,James,Moore,james.moore@email.com,,555-0110,,Consultant
+c009-uuid,Amanda,Williams,a.williams@sales.com,awilliams@corp.com,555-0109,,Sales executive

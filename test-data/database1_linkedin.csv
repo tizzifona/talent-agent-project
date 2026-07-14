@@ -1,0 +1,8 @@
+id,first_name,last_name,email,phone,company,position,linkedin_url
+1,John,Smith,john.smith@email.com,+1-555-0101,TechCorp,Software Engineer,linkedin.com/in/johnsmith
+2,Sarah,Johnson,s.johnson@company.com,+1-555-0102,DataInc,Data Analyst,linkedin.com/in/sarahjohnson
+3,Michael,Brown,mbrown@tech.io,+1-555-0103,StartupXYZ,CTO,linkedin.com/in/michaelbrown
+4,Emily,Davis,emily.d@email.com,+1-555-0104,FinTech Ltd,Product Manager,linkedin.com/in/emilydavis
+5,Robert,Wilson,rwilson@corp.com,+1-555-0105,BigCorp,Senior Developer,linkedin.com/in/robertwilson
+6,Jennifer,Martinez,jmartinez@email.com,+1-555-0106,Agency Co,Designer,linkedin.com/in/jennifermartinez
+7,David,Anderson,d.anderson@startup.io,+1-555-0107,NewVenture,CEO,linkedin.com/in/davidanderson

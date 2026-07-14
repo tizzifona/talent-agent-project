@@ -1,2 +1,38 @@
+# Deployment files
+DEPLOY.md
+
+# Deno cache
 .deno/
+
+# Test data (keep in repo for demo)
+# test-data/
+
+# Logs
 *.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node modules
+node_modules/
+canvases/node_modules/
+
+# Environment
+.env
+.env.local
+
+# Agent tools and transcripts (Cursor-specific)
+agent-tools/
+agent-transcripts/
+terminals/
+canvases/
+
+# Keep public/ for development reference
+# public/

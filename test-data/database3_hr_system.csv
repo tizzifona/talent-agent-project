@@ -1,0 +1,6 @@
+employee_number,surname,given_name,work_email,office_phone,department,job_title,hire_date
+E12345,Smith,Jonathan,jsmith@techcorp.com,555-0101,Engineering,Sr. Software Engineer,2020-03-15
+E23456,Johnson,Sarah,sjohnson@datainc.com,555-0102,Analytics,Data Analyst,2021-06-01
+E34567,Anderson,David,danderson@newventure.com,555-0107,Executive,Chief Executive Officer,2019-01-10
+E45678,Williams,Amanda,awilliams@corp.com,555-0109,Sales,Account Executive,2022-02-20
+E56789,Martinez,Jennifer,jmartinez@agency.com,555-0106,Design,Lead Designer,2020-09-12

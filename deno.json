@@ -1,21 +1,20 @@
 {
   "name": "talent-agent-project",
   "version": "0.1.0",
-  "exports": "./src/main.ts",
   "tasks": {
-    "dev": "deno run --watch src/main.ts",
-    "start": "deno run src/main.ts",
+    "dev": "cd public && deno run --allow-net --allow-read agent/main.ts",
+    "check": "deno check public/agent/main.ts",
+    "fmt": "deno fmt public/",
+    "lint": "deno lint public/",
     "test": "deno test --allow-read",
-    "fmt": "deno fmt",
-    "lint": "deno lint",
-    "check": "deno check src/main.ts"
+    "serve": "deno run --allow-net --allow-read https://deno.land/std/http/file_server.ts public/"
   },
   "fmt": {
     "useTabs": false,
-    "lineWidth": 80,
+    "lineWidth": 100,
     "indentWidth": 2,
     "semiColons": true,
-    "singleQuote": false
+    "singleQuote": true
   },
   "lint": {
     "rules": {
@@ -24,7 +23,7 @@
   },
   "compilerOptions": {
     "strict": true,
-    "lib": ["deno.window"]
+    "lib": ["deno.window", "deno.ns"]
   },
   "imports": {
     "@std/assert": "jsr:@std/assert@^1.0.19"

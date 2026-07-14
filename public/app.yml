@@ -1,0 +1,70 @@
+title: Talent Agent - Data Deduplication System
+description: Multi-database deduplication and matching system with AI assistance
+icon: 🎯
+
+scope:
+  chat:
+    description: Can use generative chat with AI assistant
+  useTools:
+    description: Can use MCP tools for data processing
+  read_memory:
+    description: Can query semantic memory for insights
+  write_memory:
+    description: Can store processing results in memory
+  process_data:
+    description: Can process CSV data and perform matching
+  expertAsk:
+    description: Can ask this agent as an MCP expert
+
+grant:
+  ${party}:
+    - chat
+    - useTools
+    - read_memory
+    - write_memory
+    - process_data
+    - expertAsk
+
+audience:
+  ${party}:
+    ${source}: chat useTools read_memory write_memory process_data
+
+tab:
+  agent:
+    src: agent/main.ts
+    importmap: importmap.json
+    ttl: 300
+    config:
+      systemPrompt: |
+        You are a data deduplication expert assistant. You help users:
+        1. Analyze matching results between multiple databases
+        2. Suggest improvements to matching rules and thresholds
+        3. Identify potential false positives/negatives
+        4. Provide insights on data quality issues
+        5. Generate detailed reports and recommendations
+
+        You have access to semantic memory containing deduplication results and provenance data.
+        Use your knowledge to help users make informed decisions about ambiguous matches.
+
+mcp:
+  tab: agent
+  path: /rpc
+  tools:
+    - name: expert_deduplicate
+      description: Ask the deduplication expert for analysis and recommendations
+      capability: expertAsk
+      inputSchema:
+        type: object
+        properties:
+          question:
+            type: string
+            description: Question about deduplication, matching rules, or data quality
+        required: [question]
+        additionalProperties: false
+      outputSchema:
+        type: object
+        properties:
+          answer:
+            type: string
+        required: [answer]
+        additionalProperties: false

@@ -1,0 +1,9 @@
+subscriber_id,email,name,phone,subscription_date,interests
+NS001,john.smith@email.com,John Smith,,2023-05-12,technology
+NS002,s.johnson@company.com,S. Johnson,,2023-06-20,data-science
+NS003,emily.d@email.com,Emily Davis,555-0104,2023-07-15,product-management
+NS004,lisa.t@marketing.com,Lisa Thompson,+1-555-0108,2023-08-01,marketing
+NS005,rwilson@corp.com,Robert W.,,2023-09-10,software-development
+NS006,sarah.johnson@email.com,Sarah Johnson,,2023-10-05,analytics
+NS007,d.anderson@startup.io,David Anderson,,2023-11-12,entrepreneurship
+NS008,james.moore@email.com,James Moore,555-0110,2024-01-20,consulting

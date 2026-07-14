@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Talent Agent - Data Deduplication System</title>
+    <link rel="webdaemon" href="app.yml">
+    <link rel="stylesheet" href="app.css">
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>🎯 Talent Agent</h1>
+        <p class="subtitle">Multi-Database Deduplication & Matching System</p>
+        <div id="connection-status" class="status-badge">Connecting...</div>
+      </header>
+
+      <main>
+        <!-- Upload Section -->
+        <section class="card" id="upload-section">
+          <h2>📊 Data Sources (7 Databases)</h2>
+          <div class="database-list">
+            <div class="db-item" data-db="1">
+              <span class="db-name">LinkedIn Database</span>
+              <span class="db-status">Ready</span>
+              <span class="db-count">7 rows</span>
+            </div>
+            <div class="db-item" data-db="2">
+              <span class="db-name">Recruiting System</span>
+              <span class="db-status">Ready</span>
+              <span class="db-count">8 rows</span>
+            </div>
+            <div class="db-item" data-db="3">
+              <span class="db-name">HR System</span>
+              <span class="db-status">Ready</span>
+              <span class="db-count">5 rows</span>
+            </div>
+            <div class="db-item" data-db="4">
+              <span class="db-name">Conference Attendees</span>
+              <span class="db-status">Ready</span>
+              <span class="db-count">7 rows</span>
+            </div>
+            <div class="db-item" data-db="5">
+              <span class="db-name">Newsletter Subscribers</span>
+              <span class="db-status">Ready</span>
+              <span class="db-count">8 rows</span>
+            </div>
+            <div class="db-item" data-db="6">
+              <span class="db-name">Contact Database</span>
+              <span class="db-status">Ready</span>
+              <span class="db-count">9 rows</span>
+            </div>
+            <div class="db-item" data-db="7">
+              <span class="db-name">Event Participants</span>
+              <span class="db-status">Ready</span>
+              <span class="db-count">9 rows</span>
+            </div>
+          </div>
+          <button id="load-data-btn" class="primary-btn">Load All Data Sources</button>
+        </section>
+
+        <!-- Matching Settings -->
+        <section class="card" id="settings-section">
+          <h2>⚙️ Matching Configuration</h2>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label>Email Match Priority</label>
+              <select id="email-priority">
+                <option value="1" selected>1 - Highest</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <label>Phone Match Priority</label>
+              <select id="phone-priority">
+                <option value="2" selected>2</option>
+                <option value="1">1 - Highest</option>
+                <option value="3">3</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <label>Fuzzy Name Threshold (%)</label>
+              <input type="number" id="fuzzy-threshold" value="85" min="50" max="100">
+            </div>
+            <div class="setting-item">
+              <label>Auto-merge Confidence</label>
+              <select id="auto-merge">
+                <option value="high" selected>High confidence only</option>
+                <option value="medium">Medium and above</option>
+                <option value="all">All matches</option>
+              </select>
+            </div>
+          </div>
+          <button id="run-matching-btn" class="primary-btn"
+            disabled>🚀 Run Matching & Deduplication</button>
+        </section>
+
+        <!-- Results Dashboard -->
+        <section class="card" id="results-section" style="display: none;">
+          <h2>📈 Deduplication Results</h2>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-value" id="total-records">0</div>
+              <div class="metric-label">Total Records</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value" id="unique-persons">0</div>
+              <div class="metric-label">Unique Persons</div>
+            </div>
+            <div class="metric-card email-match">
+              <div class="metric-value" id="email-matches">0</div>
+              <div class="metric-label">Email Matches</div>
+            </div>
+            <div class="metric-card phone-match">
+              <div class="metric-value" id="phone-matches">0</div>
+              <div class="metric-label">Phone Matches</div>
+            </div>
+            <div class="metric-card fuzzy-match">
+              <div class="metric-value" id="fuzzy-matches">0</div>
+              <div class="metric-label">Fuzzy Name Matches</div>
+            </div>
+            <div class="metric-card manual-review">
+              <div class="metric-value" id="manual-review">0</div>
+              <div class="metric-label">Manual Review</div>
+            </div>
+            <div class="metric-card held-out">
+              <div class="metric-value" id="held-out">0</div>
+              <div class="metric-label">Held Out (No Match)</div>
+            </div>
+          </div>
+          <button id="export-btn" class="secondary-btn">📥 Export Results (CSV)</button>
+          <button id="view-details-btn" class="secondary-btn">👁️ View Detailed Report</button>
+        </section>
+
+        <!-- AI Chat Assistant -->
+        <section class="card" id="chat-section">
+          <h2>💬 AI Assistant</h2>
+          <div id="chat-messages" class="chat-container"></div>
+          <div class="chat-input-container">
+            <input type="text" id="chat-input"
+              placeholder="Ask about matching results, suggest improvements..." disabled>
+            <button id="send-chat-btn" disabled>Send</button>
+          </div>
+        </section>
+
+        <!-- Manual Review Queue -->
+        <section class="card" id="review-section" style="display: none;">
+          <h2>🔍 Manual Review Queue</h2>
+          <div id="review-queue"></div>
+        </section>
+      </main>
+
+      <footer>
+        <p>Powered by Web Daemon • Running on daemon: <strong id="daemon-party">...</strong></p>
+      </footer>
+    </div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

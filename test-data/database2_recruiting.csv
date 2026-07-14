@@ -1,0 +1,9 @@
+candidate_id,full_name,email_address,mobile,current_role,experience_years,skills
+R001,John Smith,john.smith@email.com,555-0101,Software Engineer,5,"JavaScript,Python,React"
+R002,Sarah M. Johnson,sarah.johnson@email.com,555-0102,Data Analyst,3,"SQL,Python,Tableau"
+R003,Mike Brown,m.brown@tech.io,+1(555)0103,Chief Technology Officer,10,"Leadership,Architecture,Cloud"
+R004,Emily Davis,emily.davis@gmail.com,555.0104,Product Manager,7,"Agile,Product Strategy,UX"
+R005,Rob Wilson,r.wilson@corp.com,+15550105,Senior Software Developer,6,"Java,Kotlin,Spring"
+R006,Jenny Martinez,jenny.m@email.com,555-0106,UI/UX Designer,4,"Figma,Adobe XD,Prototyping"
+R007,Dave Anderson,david@startup.io,,Founder & CEO,12,"Entrepreneurship,Strategy"
+R008,Lisa Thompson,l.thompson@company.com,555-0108,Marketing Manager,5,"Digital Marketing,SEO"

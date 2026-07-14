@@ -1,0 +1,10 @@
+event_id,participant_email,participant_name,phone_contact,event_name,attended_date
+EVT001,john.smith@email.com,"Smith, John",555-0101,Tech Workshop 2024,2024-03-15
+EVT002,s.johnson@company.com,Sarah Johnson,(555) 0102,Data Science Summit,2024-04-20
+EVT003,mbrown@tech.io,M. Brown,555.0103,Startup Pitch Night,2024-05-10
+EVT004,emily.davis@gmail.com,Emily D.,+1-555-0104,Product Camp,2024-06-05
+EVT005,rwilson@corp.com,Bob Wilson,555-0105,DevOps Conference,2024-06-15
+EVT006,jmartinez@email.com,Jenny Martinez,5550106,Design Thinking Workshop,2024-07-01
+EVT007,lisa.t@marketing.com,Lisa T.,555-0108,Marketing Bootcamp,2024-07-12
+EVT008,james.moore@email.com,James Moore,+1(555)0110,Consulting Forum,2024-07-20
+EVT009,john.smith@email.com,J. Smith,+1-555-0101,Advanced JavaScript,2024-08-01
