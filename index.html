@@ -150,8 +150,13 @@
     </div>
 
   <script type="module">
-    // Import and initialize app
-    import { BrowserApp, GenerativeChatClient, createDefaultBrowserChatTools } from 'https://webdaemon.online/latest/static/lib/index.js';
+    // Import Web Daemon library
+    console.log('🔄 Importing Web Daemon library...');
+    
+    import { BrowserApp, GenerativeChatClient, createDefaultBrowserChatTools } 
+      from 'https://webdaemon.online/latest/static/lib/index.js';
+    
+    console.log('✅ Library imported successfully');
 
     class TalentAgentApp {
       constructor() {
