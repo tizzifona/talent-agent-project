@@ -503,17 +503,17 @@
         container.scrollTop = container.scrollHeight;
       }
 
-      async exportResults() {
+      exportResults() {
         try {
-          const url = await this.app.getAgentUrl('agent');
-          const response = await fetch(`${url}/export`, {
-            method: 'POST',
-            headers: {
-              'X-Tabserver-Token': this.app.getTokenBase64()
-            }
-          });
+          if (!this.matchingResults || !this.matchingResults.persons) {
+            throw new Error('No results to export');
+          }
 
-          const blob = await response.blob();
+          // Generate CSV in browser (no server needed)
+          const csvContent = this.generateCSV(this.matchingResults.persons);
+          
+          // Create blob and download
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
           const downloadUrl = window.URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = downloadUrl;
@@ -528,6 +528,63 @@
           console.error('Export error:', error);
           this.showError(`Failed to export: ${error.message}`);
         }
+      }
+
+      generateCSV(persons) {
+        // CSV headers
+        const headers = [
+          'Person ID',
+          'Primary Name',
+          'Primary Email',
+          'Primary Phone',
+          'Match Type',
+          'Confidence',
+          'Record Count',
+          'Provenance (Sources)',
+          'All Emails',
+          'All Phones'
+        ];
+
+        const rows = [headers.join(',')];
+
+        for (const person of persons) {
+          // Collect all emails and phones from records
+          const allEmails = new Set();
+          const allPhones = new Set();
+
+          if (person.records) {
+            person.records.forEach(record => {
+              if (record.email) allEmails.add(record.email);
+              if (record.phone) allPhones.add(record.phone);
+            });
+          }
+
+          const row = [
+            this.escapeCSV(person.id || ''),
+            this.escapeCSV(person.primaryName || ''),
+            this.escapeCSV(person.primaryEmail || ''),
+            this.escapeCSV(person.primaryPhone || ''),
+            this.escapeCSV(person.matchType || ''),
+            person.confidence || '',
+            person.records ? person.records.length : 0,
+            this.escapeCSV((person.provenance || []).join('; ')),
+            this.escapeCSV(Array.from(allEmails).join('; ')),
+            this.escapeCSV(Array.from(allPhones).join('; '))
+          ];
+
+          rows.push(row.join(','));
+        }
+
+        return rows.join('\n');
+      }
+
+      escapeCSV(value) {
+        if (value === null || value === undefined) return '';
+        const str = String(value);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
       }
 
       showError(message) {
