@@ -167,6 +167,18 @@ header h1 {
   opacity: 0.8;
 }
 
+/* Export buttons */
+.export-buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.export-buttons .secondary-btn {
+  flex: 1;
+  margin-top: 0;
+}
+
 /* Database List */
 .database-list {
   display: grid;

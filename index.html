@@ -6,6 +6,8 @@
     <title>Talent Agent - Data Deduplication System</title>
     <link rel="webdaemon" href="app.yml">
     <link rel="stylesheet" href="app.css">
+    <!-- SheetJS library for Excel file support -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
     <div id="app">
@@ -18,11 +20,11 @@
       <main>
         <!-- File Upload Section -->
         <section class="card" id="upload-section">
-          <h2>📁 Upload CSV Files (up to 10)</h2>
+          <h2>📁 Upload Files (up to 10)</h2>
           <div class="upload-area">
-            <input type="file" id="file-input" accept=".csv" multiple style="display: none;">
-            <button id="select-files-btn" class="primary-btn">📤 Select CSV Files</button>
-            <p class="upload-hint">Select up to 10 CSV files to deduplicate</p>
+            <input type="file" id="file-input" accept=".csv,.xlsx,.xls" multiple style="display: none;">
+            <button id="select-files-btn" class="primary-btn">📤 Select Files</button>
+            <p class="upload-hint">Select up to 10 CSV or Excel (.xlsx) files to deduplicate</p>
           </div>
           
           <div id="files-list" class="files-container" style="display: none;">
@@ -122,7 +124,10 @@
               <div class="metric-label">Held Out (No Match)</div>
             </div>
           </div>
-          <button id="export-btn" class="secondary-btn">📥 Export Results (CSV)</button>
+          <div class="export-buttons">
+            <button id="export-csv-btn" class="secondary-btn">📥 Export CSV</button>
+            <button id="export-xlsx-btn" class="secondary-btn">📊 Export Excel</button>
+          </div>
           <button id="view-details-btn" class="secondary-btn">👁️ View Detailed Report</button>
         </section>
 
@@ -234,10 +239,11 @@
         fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
         clearBtn.addEventListener('click', () => this.clearFiles());
         runBtn.addEventListener('click', () => this.runMatching());
-        
+
         document.getElementById('send-chat-btn').addEventListener('click', () => this.sendChatMessage());
-        document.getElementById('export-btn')?.addEventListener('click', () => this.exportResults());
-        
+        document.getElementById('export-csv-btn')?.addEventListener('click', () => this.exportResults('csv'));
+        document.getElementById('export-xlsx-btn')?.addEventListener('click', () => this.exportResults('xlsx'));
+
         document.getElementById('chat-input').addEventListener('keypress', (e) => {
           if (e.key === 'Enter') this.sendChatMessage();
         });
@@ -252,20 +258,32 @@
         }
 
         for (const file of files) {
-          if (!file.name.endsWith('.csv')) {
-            alert(`${file.name} is not a CSV file`);
+          const isCSV = file.name.toLowerCase().endsWith('.csv');
+          const isExcel = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+          
+          if (!isCSV && !isExcel) {
+            alert(`${file.name} is not a supported file format (CSV or Excel)`);
             continue;
           }
 
           try {
-            const content = await this.readFileContent(file);
-            const parsed = this.parseCSV(content);
+            let parsed;
+            
+            if (isExcel) {
+              // Parse Excel file using SheetJS
+              parsed = await this.parseExcelFile(file);
+            } else {
+              // Parse CSV file
+              const content = await this.readFileContent(file);
+              parsed = this.parseCSV(content);
+            }
             
             this.uploadedFiles.push({
               name: file.name,
               size: file.size,
               rowCount: parsed.length,
-              data: parsed
+              data: parsed,
+              type: isExcel ? 'excel' : 'csv'
             });
           } catch (error) {
             console.error(`Error reading ${file.name}:`, error);
@@ -283,6 +301,38 @@
           reader.onload = (e) => resolve(e.target.result);
           reader.onerror = (e) => reject(new Error('Failed to read file'));
           reader.readAsText(file);
+        });
+      }
+
+      parseExcelFile(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = new Uint8Array(e.target.result);
+              const workbook = XLSX.read(data, { type: 'array' });
+              
+              // Get first sheet
+              const firstSheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheetName];
+              
+              // Convert to JSON with headers
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+              
+              // Add _rowIndex to each record
+              const records = jsonData.map((row, index) => ({
+                ...row,
+                _rowIndex: index
+              }));
+              
+              console.log(`✅ Parsed Excel file: ${file.name}, ${records.length} rows from sheet "${firstSheetName}"`);
+              resolve(records);
+            } catch (error) {
+              reject(new Error(`Failed to parse Excel: ${error.message}`));
+            }
+          };
+          reader.onerror = () => reject(new Error('Failed to read Excel file'));
+          reader.readAsArrayBuffer(file);
         });
       }
 
@@ -503,31 +553,84 @@
         container.scrollTop = container.scrollHeight;
       }
 
-      exportResults() {
+      exportResults(format = 'csv') {
         try {
           if (!this.matchingResults || !this.matchingResults.persons) {
             throw new Error('No results to export');
           }
 
-          // Generate CSV in browser (no server needed)
-          const csvContent = this.generateCSV(this.matchingResults.persons);
-          
-          // Create blob and download
-          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-          const downloadUrl = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = downloadUrl;
-          a.download = `deduplication-results-${Date.now()}.csv`;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(downloadUrl);
-          document.body.removeChild(a);
+          if (format === 'xlsx') {
+            this.exportToExcel(this.matchingResults.persons);
+          } else {
+            this.exportToCSV(this.matchingResults.persons);
+          }
 
-          this.addChatMessage('assistant', 'Results exported successfully!');
+          this.addChatMessage('assistant', `Results exported successfully as ${format.toUpperCase()}!`);
         } catch (error) {
           console.error('Export error:', error);
           this.showError(`Failed to export: ${error.message}`);
         }
+      }
+
+      exportToCSV(persons) {
+        const csvContent = this.generateCSV(persons);
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        this.downloadFile(blob, `deduplication-results-${Date.now()}.csv`);
+      }
+
+      exportToExcel(persons) {
+        // Prepare data for Excel
+        const data = persons.map(person => {
+          const allEmails = new Set();
+          const allPhones = new Set();
+
+          if (person.records) {
+            person.records.forEach(record => {
+              if (record.email) allEmails.add(record.email);
+              if (record.phone) allPhones.add(record.phone);
+            });
+          }
+
+          return {
+            'Person ID': person.id || '',
+            'Primary Name': person.primaryName || '',
+            'Primary Email': person.primaryEmail || '',
+            'Primary Phone': person.primaryPhone || '',
+            'Match Type': person.matchType || '',
+            'Confidence (%)': person.confidence || '',
+            'Record Count': person.records ? person.records.length : 0,
+            'Provenance (Sources)': (person.provenance || []).join('; '),
+            'All Emails': Array.from(allEmails).join('; '),
+            'All Phones': Array.from(allPhones).join('; ')
+          };
+        });
+
+        // Create workbook and worksheet
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Deduplication Results');
+
+        // Auto-size columns
+        const colWidths = Object.keys(data[0] || {}).map(key => ({
+          wch: Math.max(key.length, 15)
+        }));
+        ws['!cols'] = colWidths;
+
+        // Generate Excel file
+        const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        this.downloadFile(blob, `deduplication-results-${Date.now()}.xlsx`);
+      }
+
+      downloadFile(blob, filename) {
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(downloadUrl);
+        document.body.removeChild(a);
       }
 
       generateCSV(persons) {
