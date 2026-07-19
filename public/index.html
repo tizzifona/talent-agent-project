@@ -6,6 +6,8 @@
     <title>Talent Agent - Data Deduplication System</title>
     <link rel="webdaemon" href="app.yml">
     <link rel="stylesheet" href="app.css">
+    <!-- SheetJS library for Excel file support -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
     <div id="app">
@@ -16,51 +18,44 @@
       </header>
 
       <main>
-        <!-- Upload Section -->
+        <!-- File Upload Section -->
         <section class="card" id="upload-section">
-          <h2>📊 Data Sources (7 Databases)</h2>
-          <div class="database-list">
-            <div class="db-item" data-db="1">
-              <span class="db-name">LinkedIn Database</span>
-              <span class="db-status">Ready</span>
-              <span class="db-count">7 rows</span>
-            </div>
-            <div class="db-item" data-db="2">
-              <span class="db-name">Recruiting System</span>
-              <span class="db-status">Ready</span>
-              <span class="db-count">8 rows</span>
-            </div>
-            <div class="db-item" data-db="3">
-              <span class="db-name">HR System</span>
-              <span class="db-status">Ready</span>
-              <span class="db-count">5 rows</span>
-            </div>
-            <div class="db-item" data-db="4">
-              <span class="db-name">Conference Attendees</span>
-              <span class="db-status">Ready</span>
-              <span class="db-count">7 rows</span>
-            </div>
-            <div class="db-item" data-db="5">
-              <span class="db-name">Newsletter Subscribers</span>
-              <span class="db-status">Ready</span>
-              <span class="db-count">8 rows</span>
-            </div>
-            <div class="db-item" data-db="6">
-              <span class="db-name">Contact Database</span>
-              <span class="db-status">Ready</span>
-              <span class="db-count">9 rows</span>
-            </div>
-            <div class="db-item" data-db="7">
-              <span class="db-name">Event Participants</span>
-              <span class="db-status">Ready</span>
-              <span class="db-count">9 rows</span>
-            </div>
+          <h2>📁 Upload Files (up to 10)</h2>
+          <div class="upload-area">
+            <input type="file" id="file-input" accept=".csv,.xlsx,.xls" multiple style="display: none;">
+            <button id="select-files-btn" class="primary-btn">📤 Select Files</button>
+            <p class="upload-hint">Select up to 10 CSV or Excel (.xlsx) files to deduplicate</p>
           </div>
-          <button id="load-data-btn" class="primary-btn">Load All Data Sources</button>
+          
+          <div id="files-list" class="files-container" style="display: none;">
+            <h3>Uploaded Files:</h3>
+            <div id="uploaded-files"></div>
+            <button id="clear-files-btn" class="secondary-btn">Clear All</button>
+          </div>
         </section>
 
-        <!-- Matching Settings -->
-        <section class="card" id="settings-section">
+        <!-- Process Button -->
+        <section class="card" id="process-section" style="display: none;">
+          <h2>⚙️ Processing Options</h2>
+          <div class="settings-grid">
+            <div class="setting-item">
+              <label>Fuzzy Name Threshold (%)</label>
+              <input type="number" id="fuzzy-threshold" value="85" min="50" max="100">
+            </div>
+            <div class="setting-item">
+              <label>Auto-merge Confidence</label>
+              <select id="auto-merge">
+                <option value="high" selected>High confidence only</option>
+                <option value="medium">Medium and above</option>
+                <option value="all">All matches</option>
+              </select>
+            </div>
+          </div>
+          <button id="run-matching-btn" class="primary-btn">🚀 Run Deduplication</button>
+        </section>
+
+        <!-- Old database list section removed -->
+        <section class="card" id="settings-section" style="display: none;">
           <h2>⚙️ Matching Configuration</h2>
           <div class="settings-grid">
             <div class="setting-item">
@@ -129,7 +124,10 @@
               <div class="metric-label">Held Out (No Match)</div>
             </div>
           </div>
-          <button id="export-btn" class="secondary-btn">📥 Export Results (CSV)</button>
+          <div class="export-buttons">
+            <button id="export-csv-btn" class="secondary-btn">📥 Export CSV</button>
+            <button id="export-xlsx-btn" class="secondary-btn">📊 Export Excel</button>
+          </div>
           <button id="view-details-btn" class="secondary-btn">👁️ View Detailed Report</button>
         </section>
 
@@ -151,11 +149,638 @@
         </section>
       </main>
 
+      <!-- Detailed Report Modal -->
+      <div id="report-modal" class="modal-overlay">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>📋 Detailed Deduplication Report</h3>
+            <button id="modal-close" class="modal-close">✕</button>
+          </div>
+          <div class="modal-body">
+            <div id="report-content"></div>
+          </div>
+        </div>
+      </div>
+
       <footer>
-        <p>Powered by Web Daemon • Running on daemon: <strong id="daemon-party">...</strong></p>
+        <p>Powered by <strong>Blue Hope</strong> • Running on daemon: <strong id="daemon-party">...</strong></p>
       </footer>
     </div>
 
-    <script type="module" src="app.js"></script>
-  </body>
+  <script type="module">
+    // Import Web Daemon library
+    console.log('🔄 Importing Web Daemon library...');
+    
+    import { BrowserApp, GenerativeChatClient, createDefaultBrowserChatTools } 
+      from 'https://webdaemon.online/latest/static/lib/dist/index.js';
+    
+    console.log('✅ Library imported successfully');
+
+    class TalentAgentApp {
+      constructor() {
+        this.app = null;
+        this.chatClient = null;
+        this.currentChatId = null;
+        this.uploadedFiles = [];
+        this.parsedData = null;
+        this.matchingResults = null;
+        this.MAX_FILES = 10;
+      }
+
+      async init() {
+        try {
+          console.log('🚀 Initializing Talent Agent...');
+          
+          // Initialize BrowserApp
+          this.app = await BrowserApp.getInstance('TalentAgent');
+          
+          console.log('✅ BrowserApp instance created');
+
+          if (this.app.isOrphan()) {
+            this.showError('Please launch this app from your Web Daemon shell!');
+            document.getElementById('connection-status').textContent = 'Not Connected';
+            document.getElementById('connection-status').classList.add('error');
+            console.error('❌ App is orphan - not launched from daemon');
+            return;
+          }
+
+          // Update connection status
+          const party = this.app.getParty();
+          document.getElementById('daemon-party').textContent = party;
+          document.getElementById('connection-status').textContent = 'Connected';
+          document.getElementById('connection-status').classList.add('connected');
+          
+          console.log('✅ Connected to daemon:', party);
+
+          // Initialize GenerativeChatClient
+          const clientTools = createDefaultBrowserChatTools(this.app);
+          this.chatClient = new GenerativeChatClient({
+            app: this.app,
+            agentTab: 'agent',
+            clientTools
+          });
+
+          await this.chatClient.init();
+          
+          console.log('✅ Chat client initialized');
+
+          // Enable chat
+          document.getElementById('chat-input').disabled = false;
+          document.getElementById('send-chat-btn').disabled = false;
+
+          // Setup event listeners
+          this.setupEventListeners();
+
+          console.log('✅ Talent Agent initialized successfully');
+          this.addChatMessage('assistant', 'Hello! Upload files to begin deduplication.');
+
+        } catch (error) {
+          console.error('❌ Initialization error:', error);
+          this.showError(`Failed to initialize: ${error.message}`);
+          document.getElementById('connection-status').textContent = 'Error';
+          document.getElementById('connection-status').classList.add('error');
+        }
+      }
+
+      setupEventListeners() {
+        const selectBtn = document.getElementById('select-files-btn');
+        const fileInput = document.getElementById('file-input');
+        const clearBtn = document.getElementById('clear-files-btn');
+        const runBtn = document.getElementById('run-matching-btn');
+
+        selectBtn.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
+        clearBtn.addEventListener('click', () => this.clearFiles());
+        runBtn.addEventListener('click', () => this.runMatching());
+
+        document.getElementById('send-chat-btn').addEventListener('click', () => this.sendChatMessage());
+        document.getElementById('export-csv-btn')?.addEventListener('click', () => this.exportResults('csv'));
+        document.getElementById('export-xlsx-btn')?.addEventListener('click', () => this.exportResults('xlsx'));
+        document.getElementById('view-details-btn')?.addEventListener('click', () => this.showDetailedReport());
+        document.getElementById('modal-close')?.addEventListener('click', () => this.closeModal());
+        document.getElementById('report-modal')?.addEventListener('click', (e) => {
+          if (e.target.id === 'report-modal') this.closeModal();
+        });
+
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') this.sendChatMessage();
+        });
+      }
+
+      async handleFileSelect(event) {
+        const files = Array.from(event.target.files);
+        
+        if (this.uploadedFiles.length + files.length > this.MAX_FILES) {
+          alert(`Maximum ${this.MAX_FILES} files allowed`);
+          return;
+        }
+
+        for (const file of files) {
+          const isCSV = file.name.toLowerCase().endsWith('.csv');
+          const isExcel = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+          
+          if (!isCSV && !isExcel) {
+            alert(`${file.name} is not a supported file format (CSV or Excel)`);
+            continue;
+          }
+
+          try {
+            let parsed;
+            
+            if (isExcel) {
+              // Parse Excel file using SheetJS
+              parsed = await this.parseExcelFile(file);
+            } else {
+              // Parse CSV file
+              const content = await this.readFileContent(file);
+              parsed = this.parseCSV(content);
+            }
+            
+            this.uploadedFiles.push({
+              name: file.name,
+              size: file.size,
+              rowCount: parsed.length,
+              data: parsed,
+              type: isExcel ? 'excel' : 'csv'
+            });
+          } catch (error) {
+            console.error(`Error reading ${file.name}:`, error);
+            alert(`Failed to read ${file.name}: ${error.message}`);
+          }
+        }
+
+        this.updateFilesUI();
+        event.target.value = ''; // Reset input
+      }
+
+      readFileContent(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = (e) => reject(new Error('Failed to read file'));
+          reader.readAsText(file);
+        });
+      }
+
+      parseExcelFile(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = new Uint8Array(e.target.result);
+              const workbook = XLSX.read(data, { type: 'array' });
+              
+              // Get first sheet
+              const firstSheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[firstSheetName];
+              
+              // Convert to JSON with headers
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+              
+              // Add _rowIndex to each record
+              const records = jsonData.map((row, index) => ({
+                ...row,
+                _rowIndex: index
+              }));
+              
+              console.log(`✅ Parsed Excel file: ${file.name}, ${records.length} rows from sheet "${firstSheetName}"`);
+              resolve(records);
+            } catch (error) {
+              reject(new Error(`Failed to parse Excel: ${error.message}`));
+            }
+          };
+          reader.onerror = () => reject(new Error('Failed to read Excel file'));
+          reader.readAsArrayBuffer(file);
+        });
+      }
+
+      parseCSV(csvText) {
+        const lines = csvText.trim().split('\n');
+        if (lines.length < 2) return [];
+        
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        
+        return lines.slice(1).map((line, index) => {
+          const values = this.parseCSVLine(line);
+          const record = { _rowIndex: index };
+          
+          headers.forEach((header, i) => {
+            record[header] = values[i] || '';
+          });
+          
+          return record;
+        });
+      }
+
+      parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+          const char = line[i];
+          
+          if (char === '"') {
+            inQuotes = !inQuotes;
+          } else if (char === ',' && !inQuotes) {
+            result.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        
+        result.push(current.trim());
+        return result.map(v => v.replace(/^"|"$/g, ''));
+      }
+
+      updateFilesUI() {
+        const container = document.getElementById('uploaded-files');
+        const filesList = document.getElementById('files-list');
+        const processSection = document.getElementById('process-section');
+        
+        container.innerHTML = '';
+        
+        this.uploadedFiles.forEach((file, index) => {
+          const fileItem = document.createElement('div');
+          fileItem.className = 'file-item';
+          fileItem.innerHTML = `
+            <div class="file-info">
+              <span class="file-name">📄 ${file.name}</span>
+              <span class="file-size">${this.formatFileSize(file.size)}</span>
+              <span class="file-rows">${file.rowCount} rows</span>
+            </div>
+            <button class="file-remove" data-index="${index}">Remove</button>
+          `;
+          
+          fileItem.querySelector('.file-remove').addEventListener('click', () => {
+            this.removeFile(index);
+          });
+          
+          container.appendChild(fileItem);
+        });
+        
+        if (this.uploadedFiles.length > 0) {
+          filesList.style.display = 'block';
+          processSection.style.display = 'block';
+        } else {
+          filesList.style.display = 'none';
+          processSection.style.display = 'none';
+        }
+      }
+
+      formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      removeFile(index) {
+        this.uploadedFiles.splice(index, 1);
+        this.updateFilesUI();
+      }
+
+      clearFiles() {
+        this.uploadedFiles = [];
+        this.updateFilesUI();
+        this.addChatMessage('assistant', 'All files cleared.');
+      }
+
+      async runMatching() {
+        if (this.uploadedFiles.length === 0) {
+          alert('Please upload at least one CSV file');
+          return;
+        }
+
+        const btn = document.getElementById('run-matching-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> Processing...';
+
+        try {
+          const settings = {
+            fuzzyThreshold: parseInt(document.getElementById('fuzzy-threshold').value),
+            autoMerge: document.getElementById('auto-merge').value
+          };
+
+          // Prepare data for agent
+          const filesData = this.uploadedFiles.map(f => ({
+            name: f.name,
+            rowCount: f.rowCount,
+            records: f.data
+          }));
+
+          const url = await this.app.getAgentUrl('agent');
+          const response = await fetch(`${url}/run-matching`, {
+            method: 'POST',
+            headers: {
+              'X-Tabserver-Token': this.app.getTokenBase64(),
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+              files: filesData,
+              settings 
+            })
+          });
+
+          const result = await response.json();
+          
+          if (result.ok) {
+            this.matchingResults = result.ok;
+            this.displayResults();
+            btn.textContent = '✓ Matching Complete';
+            
+            this.addChatMessage('assistant', `Deduplication complete! Found ${this.matchingResults.uniquePersons} unique persons from ${this.matchingResults.totalRecords} records across ${this.uploadedFiles.length} files.`);
+          } else {
+            throw new Error(result.error || 'Failed to run matching');
+          }
+        } catch (error) {
+          console.error('Matching error:', error);
+          this.showError(`Failed to run matching: ${error.message}`);
+          btn.textContent = '🚀 Run Deduplication';
+          btn.disabled = false;
+        }
+      }
+
+      displayResults() {
+        const results = this.matchingResults;
+        
+        document.getElementById('results-section').style.display = 'block';
+        
+        document.getElementById('total-records').textContent = results.totalRecords;
+        document.getElementById('unique-persons').textContent = results.uniquePersons;
+        document.getElementById('email-matches').textContent = results.emailMatches;
+        document.getElementById('phone-matches').textContent = results.phoneMatches;
+        document.getElementById('fuzzy-matches').textContent = results.fuzzyMatches;
+        document.getElementById('manual-review').textContent = results.manualReview;
+        document.getElementById('held-out').textContent = results.heldOut;
+
+        if (results.manualReview > 0) {
+          document.getElementById('review-section').style.display = 'block';
+        }
+
+        document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+      }
+
+      async sendChatMessage() {
+        const input = document.getElementById('chat-input');
+        const message = input.value.trim();
+        
+        if (!message) return;
+
+        input.value = '';
+        input.disabled = true;
+        document.getElementById('send-chat-btn').disabled = true;
+
+        this.addChatMessage('user', message);
+
+        try {
+          if (!this.currentChatId) {
+            const session = await this.chatClient.createSession({
+              targetParty: this.app.getParty()
+            });
+            this.currentChatId = session.chatId;
+          }
+
+          await this.chatClient.sendMessage({
+            targetParty: this.app.getParty(),
+            chatId: this.currentChatId,
+            message,
+            onEvent: (event) => {
+              if (event.role === 'assistant') {
+                this.addChatMessage('assistant', event.content);
+              }
+            }
+          });
+
+        } catch (error) {
+          console.error('Chat error:', error);
+          this.addChatMessage('assistant', `Error: ${error.message}`);
+        } finally {
+          input.disabled = false;
+          document.getElementById('send-chat-btn').disabled = false;
+          input.focus();
+        }
+      }
+
+      addChatMessage(role, content) {
+        const container = document.getElementById('chat-messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${role}`;
+        messageDiv.textContent = content;
+        container.appendChild(messageDiv);
+        container.scrollTop = container.scrollHeight;
+      }
+
+      exportResults(format = 'csv') {
+        try {
+          if (!this.matchingResults || !this.matchingResults.persons) {
+            throw new Error('No results to export');
+          }
+
+          if (format === 'xlsx') {
+            this.exportToExcel(this.matchingResults.persons);
+          } else {
+            this.exportToCSV(this.matchingResults.persons);
+          }
+
+          this.addChatMessage('assistant', `Results exported successfully as ${format.toUpperCase()}!`);
+        } catch (error) {
+          console.error('Export error:', error);
+          this.showError(`Failed to export: ${error.message}`);
+        }
+      }
+
+      exportToCSV(persons) {
+        const csvContent = this.generateCSV(persons);
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        this.downloadFile(blob, `deduplication-results-${Date.now()}.csv`);
+      }
+
+      exportToExcel(persons) {
+        // Prepare data for Excel
+        const data = persons.map(person => {
+          const allEmails = new Set();
+          const allPhones = new Set();
+
+          if (person.records) {
+            person.records.forEach(record => {
+              if (record.email) allEmails.add(record.email);
+              if (record.phone) allPhones.add(record.phone);
+            });
+          }
+
+          return {
+            'Person ID': person.id || '',
+            'Primary Name': person.primaryName || '',
+            'Primary Email': person.primaryEmail || '',
+            'Primary Phone': person.primaryPhone || '',
+            'Match Type': person.matchType || '',
+            'Confidence (%)': person.confidence || '',
+            'Record Count': person.records ? person.records.length : 0,
+            'Provenance (Sources)': (person.provenance || []).join('; '),
+            'All Emails': Array.from(allEmails).join('; '),
+            'All Phones': Array.from(allPhones).join('; ')
+          };
+        });
+
+        // Create workbook and worksheet
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Deduplication Results');
+
+        // Auto-size columns
+        const colWidths = Object.keys(data[0] || {}).map(key => ({
+          wch: Math.max(key.length, 15)
+        }));
+        ws['!cols'] = colWidths;
+
+        // Generate Excel file
+        const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        this.downloadFile(blob, `deduplication-results-${Date.now()}.xlsx`);
+      }
+
+      downloadFile(blob, filename) {
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(downloadUrl);
+        document.body.removeChild(a);
+      }
+
+      generateCSV(persons) {
+        // CSV headers
+        const headers = [
+          'Person ID',
+          'Primary Name',
+          'Primary Email',
+          'Primary Phone',
+          'Match Type',
+          'Confidence',
+          'Record Count',
+          'Provenance (Sources)',
+          'All Emails',
+          'All Phones'
+        ];
+
+        const rows = [headers.join(',')];
+
+        for (const person of persons) {
+          // Collect all emails and phones from records
+          const allEmails = new Set();
+          const allPhones = new Set();
+
+          if (person.records) {
+            person.records.forEach(record => {
+              if (record.email) allEmails.add(record.email);
+              if (record.phone) allPhones.add(record.phone);
+            });
+          }
+
+          const row = [
+            this.escapeCSV(person.id || ''),
+            this.escapeCSV(person.primaryName || ''),
+            this.escapeCSV(person.primaryEmail || ''),
+            this.escapeCSV(person.primaryPhone || ''),
+            this.escapeCSV(person.matchType || ''),
+            person.confidence || '',
+            person.records ? person.records.length : 0,
+            this.escapeCSV((person.provenance || []).join('; ')),
+            this.escapeCSV(Array.from(allEmails).join('; ')),
+            this.escapeCSV(Array.from(allPhones).join('; '))
+          ];
+
+          rows.push(row.join(','));
+        }
+
+        return rows.join('\n');
+      }
+
+      escapeCSV(value) {
+        if (value === null || value === undefined) return '';
+        const str = String(value);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return '"' + str.replace(/"/g, '""') + '"';
+        }
+        return str;
+      }
+
+      showDetailedReport() {
+        if (!this.matchingResults || !this.matchingResults.persons) {
+          alert('No results to display. Run deduplication first.');
+          return;
+        }
+
+        const persons = this.matchingResults.persons;
+        const container = document.getElementById('report-content');
+        
+        // Create table HTML
+        let html = `
+          <p style="margin-bottom: 20px; color: var(--text-secondary);">
+            Found <strong>${this.matchingResults.uniquePersons}</strong> unique persons from 
+            <strong>${this.matchingResults.totalRecords}</strong> total records
+          </p>
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Person ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Match Type</th>
+                <th>Records</th>
+                <th>Sources</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        for (const person of persons) {
+          const matchClass = person.matchType.replace('-', '-');
+          html += `
+            <tr>
+              <td><code>${person.id || '-'}</code></td>
+              <td>${person.primaryName || '-'}</td>
+              <td>${person.primaryEmail || '-'}</td>
+              <td>${person.primaryPhone || '-'}</td>
+              <td><span class="match-badge ${matchClass}">${person.matchType}</span></td>
+              <td>${person.records ? person.records.length : 0}</td>
+              <td style="font-size: 0.8rem; color: var(--text-secondary);">
+                ${(person.provenance || []).slice(0, 3).join(', ')}
+                ${(person.provenance || []).length > 3 ? '...' : ''}
+              </td>
+            </tr>
+          `;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
+        // Show modal
+        document.getElementById('report-modal').classList.add('active');
+      }
+
+      closeModal() {
+        document.getElementById('report-modal').classList.remove('active');
+      }
+
+      showError(message) {
+        const container = document.getElementById('chat-messages');
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'chat-message assistant';
+        errorDiv.style.borderLeft = '4px solid var(--danger-color)';
+        errorDiv.textContent = `❌ ${message}`;
+        container.appendChild(errorDiv);
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+
+    // Initialize app when DOM is ready
+    const app = new TalentAgentApp();
+    app.init();
+  </script>
+</body>
 </html>
