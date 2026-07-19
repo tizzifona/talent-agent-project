@@ -1,4 +1,5 @@
 import { GenerativeChatAgent } from '$static/lib/ts/GenerativeChatAgent.ts';
+import { response } from '$static/lib/ts/Responses.ts';
 import { runMatching } from './matcher.ts';
 
 // deno-lint-ignore no-explicit-any
@@ -28,9 +29,7 @@ Deno.serve({ port: 0 }, async (request) => {
       const body = await request.json();
       
       if (!body.files || body.files.length === 0) {
-        return new Response(JSON.stringify({ error: 'No files provided' }), {
-          headers: { 'Content-Type': 'application/json' }
-        });
+        return response({ error: 'No files provided' });
       }
 
       // deno-lint-ignore no-explicit-any
@@ -53,14 +52,10 @@ Deno.serve({ port: 0 }, async (request) => {
 
       matchingResults = runMatching(filesData, body.settings);
 
-      return new Response(JSON.stringify({ ok: matchingResults }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return response({ ok: matchingResults });
     } catch (error) {
       console.error('Matching error:', error);
-      return new Response(JSON.stringify({ error: `Failed to run matching: ${error.message}` }), {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      return response({ error: `Failed to run matching: ${error.message}` });
     }
   }
 
