@@ -106,10 +106,18 @@ Deno.serve({ port: 0 }, async (request) => {
     }
   }
 
-function normalizeRecord(record: Record<string, string>, fileName: string): any {
+// deno-lint-ignore no-explicit-any
+function normalizeRecord(record: Record<string, any>, fileName: string): any {
   // Try to auto-detect common field patterns
+  // deno-lint-ignore no-explicit-any
   const normalized: any = {
     original: record
+  };
+
+  // Helper to convert any value to string
+  const toString = (val: unknown): string => {
+    if (val === null || val === undefined) return '';
+    return String(val);
   };
 
   // Find email field (common patterns)
@@ -117,7 +125,7 @@ function normalizeRecord(record: Record<string, string>, fileName: string): any 
   for (const key of Object.keys(record)) {
     const lowerKey = key.toLowerCase();
     if (emailFields.some(ef => lowerKey.includes(ef))) {
-      normalized.email = record[key];
+      normalized.email = toString(record[key]);
       break;
     }
   }
@@ -127,7 +135,7 @@ function normalizeRecord(record: Record<string, string>, fileName: string): any 
   for (const key of Object.keys(record)) {
     const lowerKey = key.toLowerCase();
     if (phoneFields.some(pf => lowerKey.includes(pf))) {
-      normalized.phone = record[key];
+      normalized.phone = toString(record[key]);
       break;
     }
   }
@@ -141,13 +149,13 @@ function normalizeRecord(record: Record<string, string>, fileName: string): any 
     const lowerKey = key.toLowerCase();
     
     if (firstNameFields.includes(lowerKey)) {
-      normalized.firstName = record[key];
+      normalized.firstName = toString(record[key]);
     }
     if (lastNameFields.includes(lowerKey)) {
-      normalized.lastName = record[key];
+      normalized.lastName = toString(record[key]);
     }
     if (fullNameFields.includes(lowerKey)) {
-      normalized.fullName = record[key];
+      normalized.fullName = toString(record[key]);
     }
   }
 

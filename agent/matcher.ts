@@ -27,15 +27,18 @@ interface MatchingSettings {
   autoMerge: string;
 }
 
-function normalizeEmail(email?: string): string {
+function normalizeEmail(email?: string | number): string {
   if (!email) return '';
-  return email.toLowerCase().trim();
+  // Convert to string first (just in case)
+  return String(email).toLowerCase().trim();
 }
 
-function normalizePhone(phone?: string): string {
+function normalizePhone(phone?: string | number): string {
   if (!phone) return '';
+  // Convert to string first (Excel may return numbers)
+  const phoneStr = String(phone);
   // Remove all non-digit characters
-  return phone.replace(/\D/g, '');
+  return phoneStr.replace(/\D/g, '');
 }
 
 function levenshteinDistance(str1: string, str2: string): number {
