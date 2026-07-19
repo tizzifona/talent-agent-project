@@ -70,14 +70,34 @@ Deno.serve({ port: 0 }, async (request) => {
       return response({ error: 'Missing capability: process_data' });
     }
 
-    if (!loadedData) {
-      return response({ error: 'No data loaded. Please load data first.' });
-    }
-
     try {
       const body = await request.json();
-      matchingResults = runMatching(loadedData, body.settings);
       
+      if (!body.files || body.files.length === 0) {
+        return response({ error: 'No files provided' });
+      }
+
+      // Convert uploaded files to the format matcher expects
+      // deno-lint-ignore no-explicit-any
+      const filesData = {
+        // deno-lint-ignore no-explicit-any
+        databases: body.files.map((file: any) => ({
+          name: file.name,
+          rowCount: file.rowCount,
+          // deno-lint-ignore no-explicit-any
+          records: file.records.map((record: any, index: number) => ({
+            ...normalizeRecord(record, file.name),
+            sourceDb: file.name,
+            rowIndex: index
+          }))
+        })),
+        // deno-lint-ignore no-explicit-any
+        totalRecords: body.files.reduce((sum: number, f: any) => sum + f.rowCount, 0),
+        loadedAt: new Date().toISOString()
+      };
+
+      matchingResults = runMatching(filesData, body.settings);
+
       // Store results in semantic memory if available
       if (token.hasCapability(source, 'write_memory') && chatAgent) {
         // TODO: Store in semantic memory
@@ -89,6 +109,62 @@ Deno.serve({ port: 0 }, async (request) => {
       return response({ error: `Failed to run matching: ${error.message}` });
     }
   }
+
+// deno-lint-ignore no-explicit-any
+function normalizeRecord(record: Record<string, any>, fileName: string): any {
+  // Try to auto-detect common field patterns
+  // deno-lint-ignore no-explicit-any
+  const normalized: any = {
+    original: record
+  };
+
+  // Helper to convert any value to string
+  const toString = (val: unknown): string => {
+    if (val === null || val === undefined) return '';
+    return String(val);
+  };
+
+  // Find email field (common patterns)
+  const emailFields = ['email', 'email_address', 'contact_email', 'work_email', 'primary_email', 'e-mail', 'email_primary'];
+  for (const key of Object.keys(record)) {
+    const lowerKey = key.toLowerCase();
+    if (emailFields.some(ef => lowerKey.includes(ef))) {
+      normalized.email = toString(record[key]);
+      break;
+    }
+  }
+
+  // Find phone field
+  const phoneFields = ['phone', 'mobile', 'telephone', 'phone_number', 'phone_mobile', 'contact_phone', 'office_phone'];
+  for (const key of Object.keys(record)) {
+    const lowerKey = key.toLowerCase();
+    if (phoneFields.some(pf => lowerKey.includes(pf))) {
+      normalized.phone = toString(record[key]);
+      break;
+    }
+  }
+
+  // Find name fields
+  const firstNameFields = ['first_name', 'firstname', 'first', 'given_name', 'givenname'];
+  const lastNameFields = ['last_name', 'lastname', 'last', 'surname', 'family_name'];
+  const fullNameFields = ['full_name', 'fullname', 'name', 'attendee_name', 'participant_name', 'contact_name'];
+
+  for (const key of Object.keys(record)) {
+    const lowerKey = key.toLowerCase();
+    
+    if (firstNameFields.includes(lowerKey)) {
+      normalized.firstName = toString(record[key]);
+    }
+    if (lastNameFields.includes(lowerKey)) {
+      normalized.lastName = toString(record[key]);
+    }
+    if (fullNameFields.includes(lowerKey)) {
+      normalized.fullName = toString(record[key]);
+    }
+  }
+
+  return normalized;
+}
 
   if (url.pathname.endsWith('/export') && request.method === 'POST') {
     if (!matchingResults) {
