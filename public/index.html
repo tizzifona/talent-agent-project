@@ -554,7 +554,8 @@
 
         } catch (error) {
           console.error('Chat error:', error);
-          this.addChatMessage('assistant', `Error: ${error.message}`);
+          const errorMsg = error?.message || error?.toString() || 'Unknown error occurred';
+          this.addChatMessage('assistant', `Error: ${errorMsg}`);
         } finally {
           input.disabled = false;
           document.getElementById('send-chat-btn').disabled = false;
