@@ -149,8 +149,21 @@
         </section>
       </main>
 
+      <!-- Detailed Report Modal -->
+      <div id="report-modal" class="modal-overlay">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>📋 Detailed Deduplication Report</h3>
+            <button id="modal-close" class="modal-close">✕</button>
+          </div>
+          <div class="modal-body">
+            <div id="report-content"></div>
+          </div>
+        </div>
+      </div>
+
       <footer>
-        <p>Powered by Web Daemon • Running on daemon: <strong id="daemon-party">...</strong></p>
+        <p>Powered by <strong>Blue Hope</strong> • Running on daemon: <strong id="daemon-party">...</strong></p>
       </footer>
     </div>
 
@@ -219,7 +232,7 @@
           this.setupEventListeners();
 
           console.log('✅ Talent Agent initialized successfully');
-          this.addChatMessage('assistant', 'Hello! Upload CSV files to begin deduplication.');
+          this.addChatMessage('assistant', 'Hello! Upload files to begin deduplication.');
 
         } catch (error) {
           console.error('❌ Initialization error:', error);
@@ -243,6 +256,11 @@
         document.getElementById('send-chat-btn').addEventListener('click', () => this.sendChatMessage());
         document.getElementById('export-csv-btn')?.addEventListener('click', () => this.exportResults('csv'));
         document.getElementById('export-xlsx-btn')?.addEventListener('click', () => this.exportResults('xlsx'));
+        document.getElementById('view-details-btn')?.addEventListener('click', () => this.showDetailedReport());
+        document.getElementById('modal-close')?.addEventListener('click', () => this.closeModal());
+        document.getElementById('report-modal')?.addEventListener('click', (e) => {
+          if (e.target.id === 'report-modal') this.closeModal();
+        });
 
         document.getElementById('chat-input').addEventListener('keypress', (e) => {
           if (e.key === 'Enter') this.sendChatMessage();
@@ -688,6 +706,65 @@
           return '"' + str.replace(/"/g, '""') + '"';
         }
         return str;
+      }
+
+      showDetailedReport() {
+        if (!this.matchingResults || !this.matchingResults.persons) {
+          alert('No results to display. Run deduplication first.');
+          return;
+        }
+
+        const persons = this.matchingResults.persons;
+        const container = document.getElementById('report-content');
+        
+        // Create table HTML
+        let html = `
+          <p style="margin-bottom: 20px; color: var(--text-secondary);">
+            Found <strong>${this.matchingResults.uniquePersons}</strong> unique persons from 
+            <strong>${this.matchingResults.totalRecords}</strong> total records
+          </p>
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Person ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Match Type</th>
+                <th>Records</th>
+                <th>Sources</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        for (const person of persons) {
+          const matchClass = person.matchType.replace('-', '-');
+          html += `
+            <tr>
+              <td><code>${person.id || '-'}</code></td>
+              <td>${person.primaryName || '-'}</td>
+              <td>${person.primaryEmail || '-'}</td>
+              <td>${person.primaryPhone || '-'}</td>
+              <td><span class="match-badge ${matchClass}">${person.matchType}</span></td>
+              <td>${person.records ? person.records.length : 0}</td>
+              <td style="font-size: 0.8rem; color: var(--text-secondary);">
+                ${(person.provenance || []).slice(0, 3).join(', ')}
+                ${(person.provenance || []).length > 3 ? '...' : ''}
+              </td>
+            </tr>
+          `;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+
+        // Show modal
+        document.getElementById('report-modal').classList.add('active');
+      }
+
+      closeModal() {
+        document.getElementById('report-modal').classList.remove('active');
       }
 
       showError(message) {
