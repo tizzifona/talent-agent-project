@@ -1,4 +1,4 @@
-import { GenerativeChatAgent } from 'webdaemon';
+import { GenerativeChatAgent } from '$static/lib/ts/GenerativeChatAgent.ts';
 import { runMatching } from './matcher.ts';
 
 // deno-lint-ignore no-explicit-any
