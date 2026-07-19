@@ -534,23 +534,46 @@
         this.addChatMessage('user', message);
 
         try {
-          if (!this.currentChatId) {
-            const session = await this.chatClient.createSession({
-              targetParty: this.app.getParty()
-            });
-            this.currentChatId = session.chatId;
+          const targetParty = this.app.getParty();
+          console.log('🔍 [DIAG] targetParty =', targetParty);
+
+          // Check available models
+          try {
+            const modelsResult = await this.chatClient.listModels({ targetParty });
+            console.log('🔍 [DIAG] Available models:', modelsResult);
+          } catch (mErr) {
+            console.error('🔍 [DIAG] listModels failed:', mErr);
           }
 
-          await this.chatClient.sendMessage({
-            targetParty: this.app.getParty(),
+          if (!this.currentChatId) {
+            const session = await this.chatClient.createSession({ targetParty });
+            console.log('🔍 [DIAG] Session created:', session);
+            this.currentChatId = session.chatId;
+          }
+          console.log('🔍 [DIAG] Using chatId:', this.currentChatId);
+
+          const result = await this.chatClient.sendMessage({
+            targetParty,
             chatId: this.currentChatId,
             message,
+            toolsEnabled: true,
+            toolDetails: true,
             onEvent: (event) => {
+              console.log('🔍 [DIAG] onEvent:', event.role, '->', event.content);
               if (event.role === 'assistant') {
                 this.addChatMessage('assistant', event.content);
+              } else if (event.role === 'thinking') {
+                console.log('🔍 [DIAG] thinking:', event.content);
               }
             }
           });
+          console.log('🔍 [DIAG] sendMessage final result:', result);
+
+          // Fallback: if no assistant event streamed, render from result.events
+          if (result && Array.isArray(result.events)) {
+            const hasAssistant = result.events.some(e => e.role === 'assistant');
+            console.log('🔍 [DIAG] result.events count:', result.events.length, 'hasAssistant:', hasAssistant);
+          }
 
         } catch (error) {
           console.error('Chat error:', error);
