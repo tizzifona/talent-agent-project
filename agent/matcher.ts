@@ -6,6 +6,11 @@ interface DatabaseRecord {
   fullName?: string;
   email?: string;
   phone?: string;
+  skills?: string[];
+  isInternal?: boolean;
+  internalDomain?: string;
+  isTestRow?: boolean;
+  testReason?: string;
   original?: Record<string, string>;
 }
 
@@ -15,9 +20,14 @@ interface MatchedPerson {
   primaryEmail?: string;
   primaryPhone?: string;
   primaryName?: string;
+  primaryFirstName?: string;
+  primaryLastName?: string;
+  skills?: string[];
   matchType: 'email' | 'phone' | 'fuzzy-name' | 'manual-review' | 'no-match';
   confidence: number;
   provenance: string[];
+  needsReview: boolean;
+  reviewReason?: string;
 }
 
 interface MatchingSettings {
@@ -89,6 +99,39 @@ function getFullName(record: DatabaseRecord): string {
   return parts.join(' ');
 }
 
+function collectSkills(records: DatabaseRecord[]): string[] {
+  const skills = new Set<string>();
+  for (const record of records) {
+    (record.skills || []).forEach((skill) => {
+      if (skill) skills.add(skill);
+    });
+  }
+  return Array.from(skills);
+}
+
+// A test-suspect row is never auto-excluded; it just needs a human to confirm
+// before permanent exclusion. This checks a whole matched group of records.
+function getTestRowReview(records: DatabaseRecord[]): { needsReview: boolean; reviewReason?: string } {
+  const testRecord = records.find((r) => r.isTestRow);
+  if (!testRecord) return { needsReview: false };
+  return {
+    needsReview: true,
+    reviewReason: testRecord.testReason || 'Possible test/placeholder row',
+  };
+}
+
+function buildPersonBase(records: DatabaseRecord[]) {
+  const primary = records[0];
+  const testReview = getTestRowReview(records);
+  return {
+    primaryFirstName: primary.firstName || '',
+    primaryLastName: primary.lastName || '',
+    skills: collectSkills(records),
+    needsReview: testReview.needsReview,
+    reviewReason: testReview.reviewReason,
+  };
+}
+
 interface LoadedDatabase {
   records: DatabaseRecord[];
 }
@@ -100,7 +143,22 @@ interface LoadedData {
 export function runMatching(loadedData: LoadedData, settings: MatchingSettings) {
   console.log('Starting matching with settings:', settings);
 
-  const allRecords: DatabaseRecord[] = loadedData.databases.flatMap((db) => db.records);
+  const allLoadedRecords: DatabaseRecord[] = loadedData.databases.flatMap((db) => db.records);
+
+  // Staff/internal accounts are pulled out before matching and routed to a
+  // separate audit bucket instead of being discarded or merged in.
+  const internalRecords = allLoadedRecords.filter((r) => r.isInternal);
+  const allRecords = allLoadedRecords.filter((r) => !r.isInternal);
+
+  const internalAccounts = internalRecords.map((r) => ({
+    sourceDb: r.sourceDb,
+    rowIndex: r.rowIndex,
+    name: getFullName(r),
+    email: r.email || '',
+    phone: r.phone || '',
+    internalDomain: r.internalDomain || '',
+  }));
+
   const matchedPersons: MatchedPerson[] = [];
   const processedRecords = new Set<string>();
   
@@ -133,7 +191,8 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
         primaryName: getFullName(records[0]),
         matchType: 'email',
         confidence: 100,
-        provenance: records.map(r => `${r.sourceDb}:${r.rowIndex}`)
+        provenance: records.map(r => `${r.sourceDb}:${r.rowIndex}`),
+        ...buildPersonBase(records),
       };
       
       matchedPersons.push(person);
@@ -168,7 +227,8 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
         primaryName: getFullName(records[0]),
         matchType: 'phone',
         confidence: 95,
-        provenance: records.map(r => `${r.sourceDb}:${r.rowIndex}`)
+        provenance: records.map(r => `${r.sourceDb}:${r.rowIndex}`),
+        ...buildPersonBase(records),
       };
       
       matchedPersons.push(person);
@@ -215,13 +275,18 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
       const confidence = Math.round((settings.fuzzyThreshold / 100) * 90);
       const matchType = confidence >= 80 ? 'fuzzy-name' : 'manual-review';
       
+      const personBase = buildPersonBase(matchGroup);
       const person: MatchedPerson = {
         id: `fuzzy-${matchedPersons.length + 1}`,
         records: matchGroup,
         primaryName: name1,
         matchType,
         confidence,
-        provenance: matchGroup.map(r => `${r.sourceDb}:${r.rowIndex}`)
+        provenance: matchGroup.map(r => `${r.sourceDb}:${r.rowIndex}`),
+        ...personBase,
+        needsReview: personBase.needsReview || matchType === 'manual-review',
+        reviewReason: personBase.reviewReason ||
+          (matchType === 'manual-review' ? 'Fuzzy name match below auto-merge confidence' : undefined),
       };
       
       matchedPersons.push(person);
@@ -248,7 +313,8 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
         primaryPhone: normalizePhone(record.phone),
         matchType: 'no-match',
         confidence: 100,
-        provenance: [`${record.sourceDb}:${record.rowIndex}`]
+        provenance: [`${record.sourceDb}:${record.rowIndex}`],
+        ...buildPersonBase([record]),
       };
       
       matchedPersons.push(person);
@@ -256,15 +322,20 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
     }
   }
 
+  const needsReviewCount = matchedPersons.filter((p) => p.needsReview).length;
+
   const results = {
-    totalRecords: allRecords.length,
+    totalRecords: allLoadedRecords.length,
     uniquePersons: matchedPersons.length,
     emailMatches,
     phoneMatches,
     fuzzyMatches,
     manualReview,
+    needsReviewCount,
     heldOut,
     persons: matchedPersons,
+    internalAccounts,
+    internalCount: internalAccounts.length,
     settings,
     processedAt: new Date().toISOString()
   };
@@ -276,7 +347,9 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
     phoneMatches,
     fuzzyMatches,
     manualReview,
-    heldOut
+    needsReviewCount,
+    heldOut,
+    internalCount: results.internalCount
   });
 
   return results;

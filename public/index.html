@@ -117,11 +117,15 @@
             </div>
             <div class="metric-card manual-review">
               <div class="metric-value" id="manual-review">0</div>
-              <div class="metric-label">Manual Review</div>
+              <div class="metric-label">Needs Manual Review</div>
             </div>
             <div class="metric-card held-out">
               <div class="metric-value" id="held-out">0</div>
               <div class="metric-label">Held Out (No Match)</div>
+            </div>
+            <div class="metric-card internal-accounts">
+              <div class="metric-value" id="internal-accounts">0</div>
+              <div class="metric-label">Internal/Staff Accounts</div>
             </div>
           </div>
           <div class="export-buttons">
@@ -145,7 +149,15 @@
         <!-- Manual Review Queue -->
         <section class="card" id="review-section" style="display: none;">
           <h2>🔍 Manual Review Queue</h2>
+          <p class="upload-hint">These rows were not automatically excluded. Please confirm before removing them.</p>
           <div id="review-queue"></div>
+        </section>
+
+        <!-- Internal/Staff Accounts (audit bucket, not discarded) -->
+        <section class="card" id="internal-section" style="display: none;">
+          <h2>🏢 Internal / Staff Accounts</h2>
+          <p class="upload-hint">Excluded from matching because the email domain is on the internal blocklist. Kept here for audit purposes.</p>
+          <div id="internal-list"></div>
         </section>
       </main>
 
@@ -511,14 +523,92 @@
         document.getElementById('email-matches').textContent = results.emailMatches;
         document.getElementById('phone-matches').textContent = results.phoneMatches;
         document.getElementById('fuzzy-matches').textContent = results.fuzzyMatches;
-        document.getElementById('manual-review').textContent = results.manualReview;
+        document.getElementById('manual-review').textContent = results.needsReviewCount || 0;
         document.getElementById('held-out').textContent = results.heldOut;
+        document.getElementById('internal-accounts').textContent = results.internalCount || 0;
 
-        if (results.manualReview > 0) {
-          document.getElementById('review-section').style.display = 'block';
-        }
+        this.renderReviewQueue();
+        this.renderInternalAccounts();
 
         document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+      }
+
+      renderReviewQueue() {
+        const persons = (this.matchingResults.persons || []).filter(p => p.needsReview);
+        const section = document.getElementById('review-section');
+        const container = document.getElementById('review-queue');
+
+        if (persons.length === 0) {
+          section.style.display = 'none';
+          return;
+        }
+
+        let html = `
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Match Type</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        for (const person of persons) {
+          html += `
+            <tr>
+              <td>${person.primaryName || '-'}</td>
+              <td>${person.primaryEmail || '-'}</td>
+              <td><span class="match-badge ${person.matchType}">${person.matchType}</span></td>
+              <td>${person.reviewReason || ''}</td>
+            </tr>
+          `;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+        section.style.display = 'block';
+      }
+
+      renderInternalAccounts() {
+        const accounts = this.matchingResults.internalAccounts || [];
+        const section = document.getElementById('internal-section');
+        const container = document.getElementById('internal-list');
+
+        if (accounts.length === 0) {
+          section.style.display = 'none';
+          return;
+        }
+
+        let html = `
+          <table class="report-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Internal Domain</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody>
+        `;
+
+        for (const account of accounts) {
+          html += `
+            <tr>
+              <td>${account.name || '-'}</td>
+              <td>${account.email || '-'}</td>
+              <td>${account.internalDomain || '-'}</td>
+              <td style="font-size: 0.8rem; color: var(--text-secondary);">${account.sourceDb}:${account.rowIndex}</td>
+            </tr>
+          `;
+        }
+
+        html += '</tbody></table>';
+        container.innerHTML = html;
+        section.style.display = 'block';
       }
 
       async sendChatMessage() {
@@ -635,11 +725,16 @@
 
           return {
             'Person ID': person.id || '',
-            'Primary Name': person.primaryName || '',
+            'First Name': person.primaryFirstName || '',
+            'Last Name': person.primaryLastName || '',
+            'Full Name': person.primaryName || '',
             'Primary Email': person.primaryEmail || '',
             'Primary Phone': person.primaryPhone || '',
+            'Skills': (person.skills || []).join('; '),
             'Match Type': person.matchType || '',
             'Confidence (%)': person.confidence || '',
+            'Needs Review': person.needsReview ? 'YES' : '',
+            'Review Reason': person.reviewReason || '',
             'Record Count': person.records ? person.records.length : 0,
             'Provenance (Sources)': (person.provenance || []).join('; '),
             'All Emails': Array.from(allEmails).join('; '),
@@ -657,6 +752,21 @@
           wch: Math.max(key.length, 15)
         }));
         ws['!cols'] = colWidths;
+
+        // Internal/staff accounts kept as a separate audit sheet, not merged
+        // into the main results.
+        const internalAccounts = this.matchingResults.internalAccounts || [];
+        if (internalAccounts.length > 0) {
+          const internalData = internalAccounts.map(acc => ({
+            'Name': acc.name || '',
+            'Email': acc.email || '',
+            'Phone': acc.phone || '',
+            'Internal Domain': acc.internalDomain || '',
+            'Source': `${acc.sourceDb}:${acc.rowIndex}`
+          }));
+          const internalWs = XLSX.utils.json_to_sheet(internalData);
+          XLSX.utils.book_append_sheet(wb, internalWs, 'Internal Accounts');
+        }
 
         // Generate Excel file
         const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
@@ -679,11 +789,16 @@
         // CSV headers
         const headers = [
           'Person ID',
-          'Primary Name',
+          'First Name',
+          'Last Name',
+          'Full Name',
           'Primary Email',
           'Primary Phone',
+          'Skills',
           'Match Type',
           'Confidence',
+          'Needs Review',
+          'Review Reason',
           'Record Count',
           'Provenance (Sources)',
           'All Emails',
@@ -706,11 +821,16 @@
 
           const row = [
             this.escapeCSV(person.id || ''),
+            this.escapeCSV(person.primaryFirstName || ''),
+            this.escapeCSV(person.primaryLastName || ''),
             this.escapeCSV(person.primaryName || ''),
             this.escapeCSV(person.primaryEmail || ''),
             this.escapeCSV(person.primaryPhone || ''),
+            this.escapeCSV((person.skills || []).join('; ')),
             this.escapeCSV(person.matchType || ''),
             person.confidence || '',
+            person.needsReview ? 'YES' : '',
+            this.escapeCSV(person.reviewReason || ''),
             person.records ? person.records.length : 0,
             this.escapeCSV((person.provenance || []).join('; ')),
             this.escapeCSV(Array.from(allEmails).join('; ')),
@@ -718,6 +838,24 @@
           ];
 
           rows.push(row.join(','));
+        }
+
+        // Internal/staff accounts are appended as their own block below the
+        // main table (kept for audit, never merged into person records).
+        const internalAccounts = this.matchingResults?.internalAccounts || [];
+        if (internalAccounts.length > 0) {
+          rows.push('');
+          rows.push('Internal / Staff Accounts (excluded from matching)');
+          rows.push(['Name', 'Email', 'Phone', 'Internal Domain', 'Source'].join(','));
+          for (const acc of internalAccounts) {
+            rows.push([
+              this.escapeCSV(acc.name || ''),
+              this.escapeCSV(acc.email || ''),
+              this.escapeCSV(acc.phone || ''),
+              this.escapeCSV(acc.internalDomain || ''),
+              this.escapeCSV(`${acc.sourceDb}:${acc.rowIndex}`)
+            ].join(','));
+          }
         }
 
         return rows.join('\n');
@@ -751,12 +889,15 @@
             <thead>
               <tr>
                 <th>Person ID</th>
-                <th>Name</th>
+                <th>First Name</th>
+                <th>Last Name</th>
                 <th>Email</th>
                 <th>Phone</th>
+                <th>Skills</th>
                 <th>Match Type</th>
                 <th>Records</th>
                 <th>Sources</th>
+                <th>Review</th>
               </tr>
             </thead>
             <tbody>
@@ -764,18 +905,22 @@
 
         for (const person of persons) {
           const matchClass = person.matchType.replace('-', '-');
+          const rowClass = person.needsReview ? 'needs-review-row' : '';
           html += `
-            <tr>
+            <tr class="${rowClass}">
               <td><code>${person.id || '-'}</code></td>
-              <td>${person.primaryName || '-'}</td>
+              <td>${person.primaryFirstName || '-'}</td>
+              <td>${person.primaryLastName || '-'}</td>
               <td>${person.primaryEmail || '-'}</td>
               <td>${person.primaryPhone || '-'}</td>
+              <td>${(person.skills || []).join(', ') || '-'}</td>
               <td><span class="match-badge ${matchClass}">${person.matchType}</span></td>
               <td>${person.records ? person.records.length : 0}</td>
               <td style="font-size: 0.8rem; color: var(--text-secondary);">
                 ${(person.provenance || []).slice(0, 3).join(', ')}
                 ${(person.provenance || []).length > 3 ? '...' : ''}
               </td>
+              <td>${person.needsReview ? `<span class="match-badge manual-review" title="${person.reviewReason || ''}">⚠️ Review</span>` : ''}</td>
             </tr>
           `;
         }
