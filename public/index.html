@@ -534,8 +534,26 @@
 
         this.renderReviewQueue();
         this.renderInternalAccounts();
+        this.warnIfNoSkillsDetected();
 
         document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+      }
+
+      warnIfNoSkillsDetected() {
+        const persons = this.matchingResults.persons || [];
+        if (persons.some(p => (p.skills || []).length > 0)) return;
+
+        const columns = [...new Set(
+          this.uploadedFiles.flatMap(f => Object.keys(f.data[0] || {}))
+        )].filter(c => c !== '_rowIndex');
+
+        if (columns.length === 0) return;
+
+        this.addChatMessage(
+          'assistant',
+          `No skills column was recognised in your files. These are the columns I found: ${columns.join(', ')}. ` +
+          `Tell me which one holds the skills and I will add it to the mapping.`
+        );
       }
 
       renderReviewQueue() {
@@ -710,9 +728,22 @@
       }
 
       exportToCSV(persons) {
-        const csvContent = this.generateCSV(persons);
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        this.downloadFile(blob, `deduplication-results-${Date.now()}.csv`);
+        const stamp = Date.now();
+        this.downloadCSV(this.generateCSV(persons), `deduplication-results-${stamp}.csv`);
+
+        const internalAccounts = this.matchingResults?.internalAccounts || [];
+        if (internalAccounts.length > 0) {
+          this.downloadCSV(
+            this.generateInternalCSV(internalAccounts),
+            `internal-accounts-${stamp}.csv`
+          );
+        }
+      }
+
+      downloadCSV(csvContent, filename) {
+        // BOM so Excel/Numbers detect UTF-8 and render non-Latin names correctly
+        const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        this.downloadFile(blob, filename);
       }
 
       exportToExcel(persons) {
@@ -735,15 +766,15 @@
             'Full Name': person.primaryName || '',
             'Primary Email': person.primaryEmail || '',
             'Primary Phone': person.primaryPhone || '',
-            'Skills': (person.skills || []).join('; '),
+            'Skills': (person.skills || []).join(' | '),
             'Match Type': person.matchType || '',
             'Confidence (%)': person.confidence || '',
             'Needs Review': person.needsReview ? 'YES' : '',
             'Review Reason': person.reviewReason || '',
             'Record Count': person.records ? person.records.length : 0,
-            'Provenance (Sources)': (person.provenance || []).join('; '),
-            'All Emails': Array.from(allEmails).join('; '),
-            'All Phones': Array.from(allPhones).join('; ')
+            'Provenance (Sources)': (person.provenance || []).join(' | '),
+            'All Emails': Array.from(allEmails).join(' | '),
+            'All Phones': Array.from(allPhones).join(' | ')
           };
         });
 
@@ -831,36 +862,36 @@
             this.escapeCSV(person.primaryName || ''),
             this.escapeCSV(person.primaryEmail || ''),
             this.escapeCSV(person.primaryPhone || ''),
-            this.escapeCSV((person.skills || []).join('; ')),
+            this.escapeCSV((person.skills || []).join(' | ')),
             this.escapeCSV(person.matchType || ''),
             person.confidence || '',
             person.needsReview ? 'YES' : '',
             this.escapeCSV(person.reviewReason || ''),
             person.records ? person.records.length : 0,
-            this.escapeCSV((person.provenance || []).join('; ')),
-            this.escapeCSV(Array.from(allEmails).join('; ')),
-            this.escapeCSV(Array.from(allPhones).join('; '))
+            this.escapeCSV((person.provenance || []).join(' | ')),
+            this.escapeCSV(Array.from(allEmails).join(' | ')),
+            this.escapeCSV(Array.from(allPhones).join(' | '))
           ];
 
           rows.push(row.join(','));
         }
 
-        // Internal/staff accounts are appended as their own block below the
-        // main table (kept for audit, never merged into person records).
-        const internalAccounts = this.matchingResults?.internalAccounts || [];
-        if (internalAccounts.length > 0) {
-          rows.push('');
-          rows.push('Internal / Staff Accounts (excluded from matching)');
-          rows.push(['Name', 'Email', 'Phone', 'Internal Domain', 'Source'].join(','));
-          for (const acc of internalAccounts) {
-            rows.push([
-              this.escapeCSV(acc.name || ''),
-              this.escapeCSV(acc.email || ''),
-              this.escapeCSV(acc.phone || ''),
-              this.escapeCSV(acc.internalDomain || ''),
-              this.escapeCSV(`${acc.sourceDb}:${acc.rowIndex}`)
-            ].join(','));
-          }
+        return rows.join('\n');
+      }
+
+      // Internal accounts go to their own file so the main CSV stays a single
+      // rectangular table that spreadsheets can import cleanly.
+      generateInternalCSV(accounts) {
+        const rows = [['Name', 'Email', 'Phone', 'Internal Domain', 'Source'].join(',')];
+
+        for (const acc of accounts) {
+          rows.push([
+            this.escapeCSV(acc.name || ''),
+            this.escapeCSV(acc.email || ''),
+            this.escapeCSV(acc.phone || ''),
+            this.escapeCSV(acc.internalDomain || ''),
+            this.escapeCSV(`${acc.sourceDb}:${acc.rowIndex}`)
+          ].join(','));
         }
 
         return rows.join('\n');
