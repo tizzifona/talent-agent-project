@@ -73,19 +73,35 @@ export function normalizeRecord(record: Record<string, any>): any {
     normalized.lastName = parts.slice(1).join(' ');
   }
 
-  // Find skills field
-  const skillsFields = ['skills', 'keyskills', 'competencies', 'expertise'];
+  // Find skills fields. Any header containing "skill" counts, plus a list of
+  // common synonyms, and every match is merged so sources that split skills
+  // across several columns still come through.
+  const skillsSynonyms = [
+    'competencies',
+    'competences',
+    'expertise',
+    'techstack',
+    'technologies',
+    'specialization',
+    'specialisation',
+    'навыки',
+    'скиллы',
+  ];
+  const skills: string[] = [];
   for (const key of Object.keys(record)) {
     const cleaned = cleanKey(key);
-    if (skillsFields.includes(cleaned)) {
-      const raw = toString(record[key]);
-      normalized.skills = raw
-        .split(/[,;|]/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      break;
-    }
+    const isSkillsColumn = cleaned.includes('skill') || skillsSynonyms.includes(cleaned);
+    if (!isSkillsColumn) continue;
+
+    toString(record[key])
+      .split(/[,;|\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .forEach((skill) => {
+        if (!skills.includes(skill)) skills.push(skill);
+      });
   }
+  normalized.skills = skills;
 
   // Flag internal/staff accounts and obvious test/placeholder rows.
   // Internal accounts are routed to a separate bucket (not discarded).
