@@ -1,6 +1,6 @@
 title: Talent Agent - Data Deduplication System
 description: Multi-database deduplication and matching system with AI assistance
-icon: images/icon-heart.png
+icon: https://tizzifona.github.io/talent-agent-project/images/icon-heart.png
 
 scope:
   chat:

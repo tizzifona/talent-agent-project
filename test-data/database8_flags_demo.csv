@@ -1,0 +1,10 @@
+First Name,Last Name,Email,Phone,Company,Skills
+Olivia,Bennett,olivia.bennett@email.com,+1-555-0301,DesignHub,"Figma,UX Research,Prototyping"
+Marcus,Reid,m.reid@techlab.io,+1-555-0302,TechLab,"Go,Kubernetes,Terraform"
+Priya,Sharma,priya.sharma@datacore.com,+1-555-0303,DataCore,"Python,Machine Learning,SQL"
+Maria,Garcia,maria.garcia@bluehope.ai,+1-555-0401,Blue Hope,"Recruiting,Sourcing"
+Ivan,Petrov,ivan.petrov@work-well.org,+1-555-0402,Work Well,"Coaching,People Ops"
+Anna,Kim,anna.kim@campground.fyi,+1-555-0403,Campground,"Operations,Logistics"
+test,,test01@test.com,,,
+A,,a.placeholder@email.com,+1-555-0501,,
+Olivia,Bennett,olivia.b@designhub.com,+1-555-0301,DesignHub,"Design Systems,Accessibility"
