@@ -120,12 +120,24 @@ function getTestRowReview(records: DatabaseRecord[]): { needsReview: boolean; re
   };
 }
 
+// The first record of a group may be missing fields the others have, so each
+// primary value falls back to the first record that actually has one.
+function firstNonEmpty(records: DatabaseRecord[], pick: (r: DatabaseRecord) => string): string {
+  for (const record of records) {
+    const value = pick(record);
+    if (value) return value;
+  }
+  return '';
+}
+
 function buildPersonBase(records: DatabaseRecord[]) {
-  const primary = records[0];
   const testReview = getTestRowReview(records);
   return {
-    primaryFirstName: primary.firstName || '',
-    primaryLastName: primary.lastName || '',
+    primaryName: firstNonEmpty(records, (r) => getFullName(r)),
+    primaryFirstName: firstNonEmpty(records, (r) => r.firstName || ''),
+    primaryLastName: firstNonEmpty(records, (r) => r.lastName || ''),
+    primaryEmail: firstNonEmpty(records, (r) => normalizeEmail(r.email)),
+    primaryPhone: firstNonEmpty(records, (r) => normalizePhone(r.phone)),
     skills: collectSkills(records),
     needsReview: testReview.needsReview,
     reviewReason: testReview.reviewReason,
@@ -187,12 +199,11 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
       const person: MatchedPerson = {
         id: `email-${matchedPersons.length + 1}`,
         records,
+        ...buildPersonBase(records),
         primaryEmail: email,
-        primaryName: getFullName(records[0]),
         matchType: 'email',
         confidence: 100,
         provenance: records.map(r => `${r.sourceDb}:${r.rowIndex}`),
-        ...buildPersonBase(records),
       };
       
       matchedPersons.push(person);
@@ -223,12 +234,11 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
       const person: MatchedPerson = {
         id: `phone-${matchedPersons.length + 1}`,
         records,
+        ...buildPersonBase(records),
         primaryPhone: phone,
-        primaryName: getFullName(records[0]),
         matchType: 'phone',
         confidence: 95,
         provenance: records.map(r => `${r.sourceDb}:${r.rowIndex}`),
-        ...buildPersonBase(records),
       };
       
       matchedPersons.push(person);
@@ -279,11 +289,10 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
       const person: MatchedPerson = {
         id: `fuzzy-${matchedPersons.length + 1}`,
         records: matchGroup,
-        primaryName: name1,
+        ...personBase,
         matchType,
         confidence,
         provenance: matchGroup.map(r => `${r.sourceDb}:${r.rowIndex}`),
-        ...personBase,
         needsReview: personBase.needsReview || matchType === 'manual-review',
         reviewReason: personBase.reviewReason ||
           (matchType === 'manual-review' ? 'Fuzzy name match below auto-merge confidence' : undefined),
@@ -308,13 +317,10 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
       const person: MatchedPerson = {
         id: `single-${matchedPersons.length + 1}`,
         records: [record],
-        primaryName: getFullName(record),
-        primaryEmail: normalizeEmail(record.email),
-        primaryPhone: normalizePhone(record.phone),
+        ...buildPersonBase([record]),
         matchType: 'no-match',
         confidence: 100,
         provenance: [`${record.sourceDb}:${record.rowIndex}`],
-        ...buildPersonBase([record]),
       };
       
       matchedPersons.push(person);
