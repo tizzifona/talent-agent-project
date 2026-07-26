@@ -6,13 +6,9 @@ import { normalizeRecord } from './normalize.ts';
 // deno-lint-ignore no-explicit-any
 let matchingResults: any = null;
 
-const systemPrompt = `You are a data deduplication expert. Help users analyze matching results and improve data quality.
-
-You can help with:
-- Explaining how records were matched
-- Suggesting ways to improve data quality
-- Answering questions about the deduplication process
-- Providing insights about the data`;
+const systemPrompt = `You are a data identity-resolution expert for Blue Hope talent data.
+Help users analyze matching results, provenance, confidence tiers, and data quality issues
+according to the Identity Resolution Spec (email → phone → source-scoped ID → hybrid fuzzy).`;
 
 const agent = new GenerativeChatAgent({
   targetScope: 'chat useTools read_memory write_memory',
@@ -23,12 +19,11 @@ const agent = new GenerativeChatAgent({
 
 Deno.serve({ port: 0 }, async (request) => {
   const url = new URL(request.url);
-  
-  // Handle custom routes for matching
+
   if (url.pathname.endsWith('/run-matching') && request.method === 'POST') {
     try {
       const body = await request.json();
-      
+
       if (!body.files || body.files.length === 0) {
         return response({ error: 'No files provided' });
       }
@@ -41,17 +36,17 @@ Deno.serve({ port: 0 }, async (request) => {
           rowCount: file.rowCount,
           // deno-lint-ignore no-explicit-any
           records: file.records.map((record: any, index: number) => ({
-            ...normalizeRecord(record),
+            ...normalizeRecord(record, file.name),
             sourceDb: file.name,
-            rowIndex: index
-          }))
+            rowIndex: index,
+          })),
         })),
         // deno-lint-ignore no-explicit-any
         totalRecords: body.files.reduce((sum: number, f: any) => sum + f.rowCount, 0),
-        loadedAt: new Date().toISOString()
+        loadedAt: new Date().toISOString(),
       };
 
-      matchingResults = runMatching(filesData, body.settings);
+      matchingResults = runMatching(filesData, body.settings || { fuzzyThreshold: 85 });
 
       return response({ ok: matchingResults });
     } catch (error) {
@@ -60,6 +55,5 @@ Deno.serve({ port: 0 }, async (request) => {
     }
   }
 
-  // All other requests go to the chat agent (including lifecycle)
   return agent.handler(request);
 });

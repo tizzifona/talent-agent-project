@@ -637,6 +637,21 @@ footer strong {
   color: #FF6B6B;
 }
 
+.match-badge.fuzzy-auto {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+.match-badge.held-out {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748B;
+}
+
+.match-badge.source-id {
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563EB;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   header h1 {
