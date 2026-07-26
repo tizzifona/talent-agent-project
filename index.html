@@ -134,9 +134,10 @@
             </div>
           </div>
           <div class="export-buttons">
-            <button id="export-csv-btn" class="secondary-btn">📥 Export CSV</button>
-            <button id="export-xlsx-btn" class="secondary-btn">📊 Export Excel</button>
+            <button id="export-csv-btn" class="secondary-btn">📥 Export Unique Persons (CSV)</button>
+            <button id="export-xlsx-btn" class="secondary-btn">📊 Export Full Workbook (Excel)</button>
           </div>
+          <p class="upload-hint">CSV = one table of unique contacts. Excel = Unique Persons + Needs Review + Internal + Held Out sheets.</p>
           <button id="view-details-btn" class="secondary-btn">👁️ View Detailed Report</button>
         </section>
 
@@ -570,9 +571,11 @@
           <table class="report-table">
             <thead>
               <tr>
-                <th>Name</th>
+                <th>First Name</th>
+                <th>Last Name</th>
                 <th>Email</th>
-                <th>Match Type</th>
+                <th>Match</th>
+                <th>Confidence</th>
                 <th>Reason</th>
               </tr>
             </thead>
@@ -581,10 +584,12 @@
 
         for (const person of persons) {
           html += `
-            <tr>
-              <td>${person.primaryName || '-'}</td>
+            <tr class="needs-review-row">
+              <td>${person.primaryFirstName || '-'}</td>
+              <td>${person.primaryLastName || '-'}</td>
               <td>${person.primaryEmail || '-'}</td>
               <td><span class="match-badge ${person.matchType}">${person.matchType}</span></td>
+              <td>${person.matchConfidence || ''}</td>
               <td>${person.reviewReason || ''}</td>
             </tr>
           `;
@@ -715,84 +720,72 @@
           }
 
           if (format === 'xlsx') {
-            this.exportToExcel(this.matchingResults.persons);
+            this.exportToExcel();
+            this.addChatMessage('assistant', 'Excel workbook exported: Unique Persons, Needs Review, Internal Accounts, Held Out.');
           } else {
-            this.exportToCSV(this.matchingResults.persons);
+            // One file only — the unique-person graph. Dual downloads confuse Safari.
+            this.exportToCSV();
+            this.addChatMessage('assistant', 'Unique persons CSV exported. Use Excel export for Internal / Review / Held-out sheets.');
           }
-
-          this.addChatMessage('assistant', `Results exported successfully as ${format.toUpperCase()}!`);
         } catch (error) {
           console.error('Export error:', error);
           this.showError(`Failed to export: ${error.message}`);
         }
       }
 
-      exportToCSV(persons) {
-        const stamp = Date.now();
-        this.downloadCSV(this.generateCSV(persons), `deduplication-results-${stamp}.csv`);
-
-        const internalAccounts = this.matchingResults?.internalAccounts || [];
-        if (internalAccounts.length > 0) {
-          this.downloadCSV(
-            this.generateInternalCSV(internalAccounts),
-            `internal-accounts-${stamp}.csv`
-          );
+      personToRow(person) {
+        const allEmails = new Set();
+        const allPhones = new Set();
+        if (person.records) {
+          person.records.forEach(record => {
+            if (record.email) allEmails.add(record.email);
+            if (record.phone) allPhones.add(record.phone);
+          });
         }
+        return {
+          'Person ID': person.id || '',
+          'First Name': person.primaryFirstName || '',
+          'Last Name': person.primaryLastName || '',
+          'Full Name': person.primaryName || '',
+          'Primary Email': person.primaryEmail || '',
+          'Primary Phone': person.primaryPhone || '',
+          'Country': person.country || '',
+          'Skills': (person.skills || []).join(' | '),
+          'Match Type': person.matchType || '',
+          'Match Confidence': person.matchConfidence || '',
+          'Confidence (%)': person.confidence || '',
+          'Needs Review': person.needsReview ? 'YES' : '',
+          'Review Reason': person.reviewReason || '',
+          'Record Count': person.records ? person.records.length : 0,
+          'Provenance (Sources)': (person.provenance || []).join(' | '),
+          'All Emails': Array.from(allEmails).join(' | '),
+          'All Phones': Array.from(allPhones).join(' | ')
+        };
       }
 
-      downloadCSV(csvContent, filename) {
-        // BOM so Excel/Numbers detect UTF-8 and render non-Latin names correctly
+      exportToCSV() {
+        const persons = this.matchingResults.persons || [];
+        const csvContent = this.generateCSV(persons);
         const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-        this.downloadFile(blob, filename);
+        this.downloadFile(blob, `unique-persons-${Date.now()}.csv`);
       }
 
-      exportToExcel(persons) {
-        // Prepare data for Excel
-        const data = persons.map(person => {
-          const allEmails = new Set();
-          const allPhones = new Set();
-
-          if (person.records) {
-            person.records.forEach(record => {
-              if (record.email) allEmails.add(record.email);
-              if (record.phone) allPhones.add(record.phone);
-            });
-          }
-
-          return {
-            'Person ID': person.id || '',
-            'First Name': person.primaryFirstName || '',
-            'Last Name': person.primaryLastName || '',
-            'Full Name': person.primaryName || '',
-            'Primary Email': person.primaryEmail || '',
-            'Primary Phone': person.primaryPhone || '',
-            'Skills': (person.skills || []).join(' | '),
-            'Match Type': person.matchType || '',
-            'Confidence (%)': person.confidence || '',
-            'Needs Review': person.needsReview ? 'YES' : '',
-            'Review Reason': person.reviewReason || '',
-            'Record Count': person.records ? person.records.length : 0,
-            'Provenance (Sources)': (person.provenance || []).join(' | '),
-            'All Emails': Array.from(allEmails).join(' | '),
-            'All Phones': Array.from(allPhones).join(' | ')
-          };
-        });
-
-        // Create workbook and worksheet
-        const ws = XLSX.utils.json_to_sheet(data);
+      exportToExcel() {
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Deduplication Results');
 
-        // Auto-size columns
-        const colWidths = Object.keys(data[0] || {}).map(key => ({
-          wch: Math.max(key.length, 15)
-        }));
-        ws['!cols'] = colWidths;
+        const uniqueData = (this.matchingResults.persons || []).map(p => this.personToRow(p));
+        const uniqueWs = XLSX.utils.json_to_sheet(uniqueData.length ? uniqueData : [{}]);
+        XLSX.utils.book_append_sheet(wb, uniqueWs, 'Unique Persons');
 
-        // Internal/staff accounts kept as a separate audit sheet, not merged
-        // into the main results.
+        const reviewData = (this.matchingResults.persons || [])
+          .filter(p => p.needsReview)
+          .map(p => this.personToRow(p));
+        if (reviewData.length) {
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(reviewData), 'Needs Review');
+        }
+
         const internalAccounts = this.matchingResults.internalAccounts || [];
-        if (internalAccounts.length > 0) {
+        if (internalAccounts.length) {
           const internalData = internalAccounts.map(acc => ({
             'Name': acc.name || '',
             'Email': acc.email || '',
@@ -800,14 +793,18 @@
             'Internal Domain': acc.internalDomain || '',
             'Source': `${acc.sourceDb}:${acc.rowIndex}`
           }));
-          const internalWs = XLSX.utils.json_to_sheet(internalData);
-          XLSX.utils.book_append_sheet(wb, internalWs, 'Internal Accounts');
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(internalData), 'Internal Accounts');
         }
 
-        // Generate Excel file
+        const heldOut = this.matchingResults.heldOutPersons || [];
+        if (heldOut.length) {
+          const heldData = heldOut.map(p => this.personToRow(p));
+          XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(heldData), 'Held Out');
+        }
+
         const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        this.downloadFile(blob, `deduplication-results-${Date.now()}.xlsx`);
+        this.downloadFile(blob, `identity-resolution-${Date.now()}.xlsx`);
       }
 
       downloadFile(blob, filename) {
@@ -822,76 +819,21 @@
       }
 
       generateCSV(persons) {
-        // CSV headers
         const headers = [
-          'Person ID',
-          'First Name',
-          'Last Name',
-          'Full Name',
-          'Primary Email',
-          'Primary Phone',
-          'Skills',
-          'Match Type',
-          'Confidence',
-          'Needs Review',
-          'Review Reason',
-          'Record Count',
-          'Provenance (Sources)',
-          'All Emails',
-          'All Phones'
+          'Person ID', 'First Name', 'Last Name', 'Full Name',
+          'Primary Email', 'Primary Phone', 'Country', 'Skills',
+          'Match Type', 'Match Confidence', 'Confidence',
+          'Needs Review', 'Review Reason', 'Record Count',
+          'Provenance (Sources)', 'All Emails', 'All Phones'
         ];
-
         const rows = [headers.join(',')];
 
         for (const person of persons) {
-          // Collect all emails and phones from records
-          const allEmails = new Set();
-          const allPhones = new Set();
-
-          if (person.records) {
-            person.records.forEach(record => {
-              if (record.email) allEmails.add(record.email);
-              if (record.phone) allPhones.add(record.phone);
-            });
-          }
-
-          const row = [
-            this.escapeCSV(person.id || ''),
-            this.escapeCSV(person.primaryFirstName || ''),
-            this.escapeCSV(person.primaryLastName || ''),
-            this.escapeCSV(person.primaryName || ''),
-            this.escapeCSV(person.primaryEmail || ''),
-            this.escapeCSV(person.primaryPhone || ''),
-            this.escapeCSV((person.skills || []).join(' | ')),
-            this.escapeCSV(person.matchType || ''),
-            person.confidence || '',
-            person.needsReview ? 'YES' : '',
-            this.escapeCSV(person.reviewReason || ''),
-            person.records ? person.records.length : 0,
-            this.escapeCSV((person.provenance || []).join(' | ')),
-            this.escapeCSV(Array.from(allEmails).join(' | ')),
-            this.escapeCSV(Array.from(allPhones).join(' | '))
-          ];
-
-          rows.push(row.join(','));
-        }
-
-        return rows.join('\n');
-      }
-
-      // Internal accounts go to their own file so the main CSV stays a single
-      // rectangular table that spreadsheets can import cleanly.
-      generateInternalCSV(accounts) {
-        const rows = [['Name', 'Email', 'Phone', 'Internal Domain', 'Source'].join(',')];
-
-        for (const acc of accounts) {
-          rows.push([
-            this.escapeCSV(acc.name || ''),
-            this.escapeCSV(acc.email || ''),
-            this.escapeCSV(acc.phone || ''),
-            this.escapeCSV(acc.internalDomain || ''),
-            this.escapeCSV(`${acc.sourceDb}:${acc.rowIndex}`)
-          ].join(','));
+          const row = this.personToRow(person);
+          rows.push(headers.map(h => {
+            const key = h === 'Confidence' ? 'Confidence (%)' : h;
+            return this.escapeCSV(row[key] ?? '');
+          }).join(','));
         }
 
         return rows.join('\n');
@@ -914,12 +856,12 @@
 
         const persons = this.matchingResults.persons;
         const container = document.getElementById('report-content');
-        
-        // Create table HTML
+
         let html = `
           <p style="margin-bottom: 20px; color: var(--text-secondary);">
-            Found <strong>${this.matchingResults.uniquePersons}</strong> unique persons from 
-            <strong>${this.matchingResults.totalRecords}</strong> total records
+            Found <strong>${this.matchingResults.uniquePersons}</strong> unique persons from
+            <strong>${this.matchingResults.totalRecords}</strong> total records.
+            Rows needing review are highlighted.
           </p>
           <table class="report-table">
             <thead>
@@ -929,10 +871,11 @@
                 <th>Last Name</th>
                 <th>Email</th>
                 <th>Phone</th>
+                <th>Country</th>
                 <th>Skills</th>
-                <th>Match Type</th>
+                <th>Match</th>
+                <th>Confidence</th>
                 <th>Records</th>
-                <th>Sources</th>
                 <th>Review</th>
               </tr>
             </thead>
@@ -940,7 +883,6 @@
         `;
 
         for (const person of persons) {
-          const matchClass = person.matchType.replace('-', '-');
           const rowClass = person.needsReview ? 'needs-review-row' : '';
           html += `
             <tr class="${rowClass}">
@@ -949,13 +891,11 @@
               <td>${person.primaryLastName || '-'}</td>
               <td>${person.primaryEmail || '-'}</td>
               <td>${person.primaryPhone || '-'}</td>
-              <td>${(person.skills || []).join(', ') || '-'}</td>
-              <td><span class="match-badge ${matchClass}">${person.matchType}</span></td>
+              <td>${person.country || '-'}</td>
+              <td>${(person.skills || []).slice(0, 5).join(', ') || '-'}</td>
+              <td><span class="match-badge ${person.matchType}">${person.matchType}</span></td>
+              <td>${person.matchConfidence || ''}</td>
               <td>${person.records ? person.records.length : 0}</td>
-              <td style="font-size: 0.8rem; color: var(--text-secondary);">
-                ${(person.provenance || []).slice(0, 3).join(', ')}
-                ${(person.provenance || []).length > 3 ? '...' : ''}
-              </td>
               <td>${person.needsReview ? `<span class="match-badge manual-review" title="${person.reviewReason || ''}">⚠️ Review</span>` : ''}</td>
             </tr>
           `;
@@ -963,8 +903,6 @@
 
         html += '</tbody></table>';
         container.innerHTML = html;
-
-        // Show modal
         document.getElementById('report-modal').classList.add('active');
       }
 

@@ -1,5 +1,5 @@
 // Domains considered "internal" (staff/company accounts).
-// Add more domains here as they're found during review.
+// Living list — add domains as they are found during review (Spec Sec. 5 / 11).
 export const INTERNAL_EMAIL_DOMAINS = [
   'bluehope.ai',
   'work-well.org',
@@ -27,9 +27,7 @@ export function isInternalEmail(email?: string): { isInternal: boolean; domain?:
   return match ? { isInternal: true, domain: match } : { isInternal: false };
 }
 
-// Conservative test/placeholder detection: only flags very obvious cases
-// to avoid false positives on real records. Meant for manual confirmation,
-// not automatic exclusion.
+// Conservative test/placeholder detection (Spec Sec. 5).
 export function checkTestPatterns(name?: string, email?: string): { isTestRow: boolean; reason?: string } {
   const trimmedName = (name || '').trim();
   const trimmedEmail = (email || '').trim().toLowerCase();
