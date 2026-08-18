@@ -1,0 +1,399 @@
+import {
+  COLLECTIONS,
+  LATEST_RUN_ID,
+  TYPES,
+  structuredGet,
+  structuredQuery,
+  structuredWrite,
+} from './memory.ts';
+
+type JsonMap = Record<string, unknown>;
+
+interface SourceRecord {
+  sourceDb?: string;
+  rowIndex?: number;
+  email?: string;
+  phone?: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  talentId?: string;
+  profileId?: string;
+  countryOfOrigin?: string;
+  countryOfResidence?: string;
+  readinessScore?: string;
+}
+
+interface MatchedPerson {
+  id: string;
+  records?: SourceRecord[];
+  primaryEmail?: string;
+  primaryPhone?: string;
+  primaryName?: string;
+  primaryFirstName?: string;
+  primaryLastName?: string;
+  country?: string;
+  skills?: string[];
+  matchType?: string;
+  matchConfidence?: string;
+  confidence?: number;
+  provenance?: string[];
+  fieldProvenance?: JsonMap;
+  needsReview?: boolean;
+  reviewReason?: string;
+  heldOut?: boolean;
+}
+
+interface InternalAccount {
+  sourceDb?: string;
+  rowIndex?: number;
+  name?: string;
+  email?: string;
+  phone?: string;
+  internalDomain?: string;
+}
+
+export interface MatchingResults {
+  totalRecords: number;
+  uniquePersons: number;
+  emailMatches: number;
+  phoneMatches: number;
+  sourceIdMatches?: number;
+  fuzzyMatches?: number;
+  fuzzyAutoMatches?: number;
+  manualReview?: number;
+  needsReviewCount?: number;
+  heldOut: number;
+  internalCount?: number;
+  persons?: MatchedPerson[];
+  heldOutPersons?: MatchedPerson[];
+  internalAccounts?: InternalAccount[];
+  settings?: JsonMap;
+  processedAt?: string;
+}
+
+export interface PersonQuery {
+  runId?: string;
+  search?: string;
+  country?: string;
+  matchConfidence?: string;
+  needsReview?: boolean;
+  heldOut?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+const LIST_SELECT = [
+  'id',
+  'full_name',
+  'first_name',
+  'last_name',
+  'email',
+  'phone',
+  'country',
+  'skill_tags',
+  'match_type',
+  'match_confidence',
+  'confidence_pct',
+  'needs_review',
+  'review_reason',
+  'held_out',
+  'record_count',
+  'employment_status',
+  'seniority',
+];
+
+function joinTags(values: string[]): string {
+  return values.filter(Boolean).join(' | ');
+}
+
+function recordName(record: SourceRecord): string {
+  if (record.fullName) return record.fullName;
+  return [record.firstName, record.lastName].filter(Boolean).join(' ');
+}
+
+function slugId(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/@/g, '_at_')
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 180);
+}
+
+export function stablePersonId(person: MatchedPerson): string {
+  const email = (person.primaryEmail || '').trim().toLowerCase();
+  if (email) return `p-em-${slugId(email)}`;
+  const phone = (person.primaryPhone || '').replace(/\D/g, '');
+  if (phone) return `p-ph-${phone}`;
+  const first = person.records?.[0];
+  if (first?.talentId) return `p-tal-${slugId(first.talentId)}`;
+  if (first?.profileId) {
+    return `p-pf-${slugId(`${first.sourceDb || 'src'}-${first.profileId}`)}`;
+  }
+  return `p-nm-${slugId(`${person.primaryName || 'unknown'}-${first?.sourceDb || 'x'}-${first?.rowIndex ?? 0}`)}`;
+}
+
+function searchText(parts: Array<string | undefined>): string {
+  return parts.filter(Boolean).join(' ').toLowerCase();
+}
+
+function personObject(person: MatchedPerson, runId: string): JsonMap {
+  const records = person.records || [];
+  const emails = new Set<string>();
+  const phones = new Set<string>();
+  let readiness = '';
+  for (const record of records) {
+    if (record.email) emails.add(record.email);
+    if (record.phone) phones.add(record.phone);
+    if (!readiness && record.readinessScore) readiness = record.readinessScore;
+  }
+
+  return {
+    person_id: person.id,
+    first_name: person.primaryFirstName || '',
+    last_name: person.primaryLastName || '',
+    full_name: person.primaryName || '',
+    email: person.primaryEmail || '',
+    phone: person.primaryPhone || '',
+    country: person.country || '',
+    skill_tags: joinTags(person.skills || []),
+    match_type: person.matchType || '',
+    match_confidence: person.matchConfidence || '',
+    confidence_pct: person.confidence || 0,
+    needs_review: !!person.needsReview,
+    review_reason: person.reviewReason || '',
+    held_out: !!person.heldOut,
+    record_count: records.length,
+    readiness_score: readiness,
+    employment_status: '',
+    seniority: '',
+    all_emails: joinTags(Array.from(emails)),
+    all_phones: joinTags(Array.from(phones)),
+    provenance_text: (person.provenance || []).join(' | '),
+    field_provenance: person.fieldProvenance || {},
+    sources: records.map((record) => ({
+      source_file: record.sourceDb || '',
+      source_row_id: String(record.rowIndex ?? ''),
+      email: record.email || '',
+      phone: record.phone || '',
+      name: recordName(record),
+      talent_id: record.talentId || '',
+      profile_id: record.profileId || '',
+      country: record.countryOfResidence || record.countryOfOrigin || '',
+    })),
+    search_text: searchText([
+      person.primaryName,
+      person.primaryFirstName,
+      person.primaryLastName,
+      person.primaryEmail,
+      person.primaryPhone,
+      person.country,
+      joinTags(person.skills || []),
+      person.id,
+    ]),
+    run_id: runId,
+  };
+}
+
+function buildFilter(query: PersonQuery): JsonMap {
+  const filter: JsonMap = {};
+  if (query.runId) filter.run_id = query.runId;
+  if (query.search) filter.search_text = { contains: query.search };
+  if (query.country) filter.country = { contains: query.country };
+  if (query.matchConfidence) filter.match_confidence = query.matchConfidence;
+  if (typeof query.needsReview === 'boolean') filter.needs_review = query.needsReview;
+  if (typeof query.heldOut === 'boolean') filter.held_out = query.heldOut;
+  return filter;
+}
+
+function unwrapObject(record: JsonMap): JsonMap {
+  const object = (record.object && typeof record.object === 'object')
+    ? record.object as JsonMap
+    : record;
+  return { id: record.id, ...object };
+}
+
+export async function persistMatchingResults(
+  results: MatchingResults,
+  sourceFiles: string[] = [],
+): Promise<{ runId: string; personsWritten: number; internalWritten: number }> {
+  const runId = `run-${Date.now()}`;
+  const processedAt = results.processedAt || new Date().toISOString();
+
+  const people = [
+    ...(results.persons || []),
+    ...(results.heldOutPersons || []),
+  ];
+  const personRecords = people.map((person) => ({
+    id: stablePersonId(person),
+    object: personObject(person, runId),
+    metadata: { match_type: person.matchType || '', run_id: runId },
+  }));
+
+  const internalRecords = (results.internalAccounts || []).map((account, index) => {
+    const email = (account.email || '').trim().toLowerCase();
+    const id = email
+      ? `i-em-${slugId(email)}`
+      : `i-row-${slugId(`${account.sourceDb || 'src'}-${account.rowIndex ?? index}`)}`;
+    return {
+      id,
+      object: {
+        name: account.name || '',
+        email: account.email || '',
+        phone: account.phone || '',
+        internal_domain: account.internalDomain || '',
+        source_file: account.sourceDb || '',
+        source_row_id: String(account.rowIndex ?? ''),
+        run_id: runId,
+      },
+    };
+  });
+
+  const runObject = {
+    run_id: runId,
+    processed_at: processedAt,
+    total_records: results.totalRecords,
+    unique_persons: results.uniquePersons,
+    email_matches: results.emailMatches,
+    phone_matches: results.phoneMatches,
+    source_id_matches: results.sourceIdMatches || 0,
+    fuzzy_matches: results.fuzzyAutoMatches || results.fuzzyMatches || 0,
+    needs_review_count: results.needsReviewCount || 0,
+    held_out: results.heldOut,
+    internal_count: results.internalCount || internalRecords.length,
+    source_files: sourceFiles,
+    settings: results.settings || {},
+  };
+
+  await structuredWrite(COLLECTIONS.persons, TYPES.person, personRecords);
+  await structuredWrite(COLLECTIONS.internal, TYPES.internal, internalRecords);
+  await structuredWrite(COLLECTIONS.runs, TYPES.run, [
+    { id: runId, object: runObject },
+    { id: LATEST_RUN_ID, object: runObject },
+  ]);
+
+  return {
+    runId,
+    personsWritten: personRecords.length,
+    internalWritten: internalRecords.length,
+  };
+}
+
+export async function loadLatestRun(): Promise<JsonMap | null> {
+  const record = await structuredGet(COLLECTIONS.runs, LATEST_RUN_ID);
+  if (!record) return null;
+  return unwrapObject(record);
+}
+
+export async function queryPersons(query: PersonQuery): Promise<{ count: number; records: JsonMap[] }> {
+  const run = query.runId ? { run_id: query.runId } : await loadLatestRun();
+  const runId = query.runId || (run && typeof run.run_id === 'string' ? run.run_id : '');
+  if (!runId) return { count: 0, records: [] };
+
+  const result = await structuredQuery(COLLECTIONS.persons, {
+    type: TYPES.person,
+    filter: buildFilter({ ...query, runId }),
+    select: LIST_SELECT,
+    limit: query.limit ?? 25,
+    offset: query.offset ?? 0,
+    order: 'created-desc',
+  });
+
+  return {
+    count: result.count,
+    records: result.records.map(unwrapObject),
+  };
+}
+
+export async function getPerson(id: string): Promise<JsonMap | null> {
+  const record = await structuredGet(COLLECTIONS.persons, id);
+  if (!record) return null;
+  return unwrapObject(record);
+}
+
+export async function countPersons(filter: JsonMap): Promise<number> {
+  const run = await loadLatestRun();
+  const runId = run && typeof run.run_id === 'string' ? run.run_id : '';
+  if (!runId) return 0;
+  const result = await structuredQuery(COLLECTIONS.persons, {
+    type: TYPES.person,
+    filter: { run_id: runId, ...filter },
+    select: [],
+  });
+  return result.count;
+}
+
+export async function loadDashboardState(): Promise<JsonMap> {
+  const run = await loadLatestRun();
+  if (!run) {
+    return { hasData: false, run: null, stats: null };
+  }
+  const runId = String(run.run_id || '');
+  const [people, review, heldOut, internal] = await Promise.all([
+    structuredQuery(COLLECTIONS.persons, {
+      type: TYPES.person,
+      filter: { run_id: runId, held_out: false },
+      select: [],
+    }),
+    structuredQuery(COLLECTIONS.persons, {
+      type: TYPES.person,
+      filter: { run_id: runId, needs_review: true },
+      select: [],
+    }),
+    structuredQuery(COLLECTIONS.persons, {
+      type: TYPES.person,
+      filter: { run_id: runId, held_out: true },
+      select: [],
+    }),
+    structuredQuery(COLLECTIONS.internal, {
+      type: TYPES.internal,
+      filter: { run_id: runId },
+      select: [],
+    }),
+  ]);
+
+  return {
+    hasData: true,
+    run,
+    stats: {
+      total_records: run.total_records || 0,
+      unique_persons: people.count,
+      email_matches: run.email_matches || 0,
+      phone_matches: run.phone_matches || 0,
+      fuzzy_matches: run.fuzzy_matches || 0,
+      needs_review: review.count,
+      held_out: heldOut.count,
+      internal: internal.count,
+      processed_at: run.processed_at || '',
+      source_files: run.source_files || [],
+    },
+  };
+}
+
+export async function exportPersonRows(): Promise<JsonMap[]> {
+  const run = await loadLatestRun();
+  const runId = run && typeof run.run_id === 'string' ? run.run_id : '';
+  if (!runId) return [];
+  const result = await structuredQuery(COLLECTIONS.persons, {
+    type: TYPES.person,
+    filter: { run_id: runId, held_out: false },
+    select: ['*'],
+    order: 'created-desc',
+  });
+  return result.records.map(unwrapObject);
+}
+
+export async function queryInternal(runId?: string): Promise<JsonMap[]> {
+  const run = runId ? { run_id: runId } : await loadLatestRun();
+  const id = runId || (run && typeof run.run_id === 'string' ? run.run_id : '');
+  if (!id) return [];
+  const result = await structuredQuery(COLLECTIONS.internal, {
+    type: TYPES.internal,
+    filter: { run_id: id },
+    select: ['*'],
+    order: 'created-desc',
+  });
+  return result.records.map(unwrapObject);
+}

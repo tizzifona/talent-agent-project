@@ -1,6 +1,6 @@
 {
   "name": "talent-agent-project",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "tasks": {
     "dev": "cd public && deno run --allow-net --allow-read agent/main.ts",
     "check": "deno check public/agent/main.ts",
