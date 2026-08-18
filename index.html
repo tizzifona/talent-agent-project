@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css">
+    <link rel="stylesheet" href="app.css?v=4">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -287,6 +287,9 @@
           <span class="agent-live">Active</span>
         </div>
         <p class="agent-role">On every step — import, tables, review, mailing. Daemon <strong id="daemon-party">...</strong></p>
+        <div class="agent-tools">
+          <button id="chat-check-btn" class="action-btn">Check connection</button>
+        </div>
         <div id="chat-messages" class="chat-container"></div>
         <div class="chat-input-container">
           <input type="text" id="chat-input" placeholder="Ask about this step..." disabled>
@@ -339,6 +342,36 @@ Answer how-to and product questions from this description. Do not call index_sea
 Only query structured memory collections bh-talent-persons, bh-talent-tables, bh-talent-internal, bh-talent-runs, and bh-talent-review-actions when the user asks about people or saved tables.
 Never call index_resolve without a key returned by index_search.
 If a tool fails, answer from this guide. Do not invent employment_status.`;
+      const LOCAL_ANSWERS = [
+        {
+          match: /review|merge|confirm|reject|uncertain|duplicate\?/i,
+          text: 'Review holds rows the matcher could not decide alone. Open a saved table, switch to Review, then confirm the person, reject them (they stay held out), or merge them into another person. Every decision is recorded and survives a re-import.',
+        },
+        {
+          match: /mail|outreach|campaign|segment|send/i,
+          text: 'Mailing settings let you pick a saved table and a segment: everyone, only rows still needing review, or unknown employment status. It shows how many people match. Actual sending belongs to the re-engagement step and is not enabled yet.',
+        },
+        {
+          match: /export|download|xlsx|excel file|csv file/i,
+          text: 'You can export from two places: right after matching on the "table is ready" screen, or from the working table. Both give you CSV or Excel of the unique people, with match type, confidence, and the source files each person came from.',
+        },
+        {
+          match: /table|saved|rename|delete|library|preview/i,
+          text: 'Saved tables is your library. Each matching run is stored there with its name, people count, and date. From a row you can preview the people, rename the table, jump to mailing, or delete it from the library.',
+        },
+        {
+          match: /upload|import|csv|excel|file|dedup|match|clean/i,
+          text: 'Start with Upload and deduplicate. Select up to 10 CSV or Excel files, name the table, then run deduplication. Matching goes email first, then phone, then a cautious name check; anything uncertain goes to review instead of being merged silently.',
+        },
+      ];
+
+      function localAnswer(question) {
+        for (const entry of LOCAL_ANSWERS) {
+          if (entry.match.test(question)) return entry.text;
+        }
+        return 'This app has three stages. First, upload CSV or Excel files and deduplicate them into one person per contact. Second, work with the saved table: preview people, resolve the review queue, rename, or export to CSV or Excel. Third, open mailing settings to choose who would be contacted later. Ask me about any of those steps.';
+      }
+
       const AGENT_GUIDES = {
         welcome: 'This app builds one person per contact from overlapping talent files, then lets you review, export, or prepare mailing. I stay on the right for every step.',
         hub: 'Pick one path. Import if you have new files. Saved tables if matching already ran. Mailing when a table is ready to message.',
@@ -457,6 +490,7 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
           document.getElementById('clear-files-btn').addEventListener('click', () => this.clearFiles());
           document.getElementById('run-matching-btn').addEventListener('click', () => this.runMatching());
           document.getElementById('send-chat-btn').addEventListener('click', () => this.sendChatMessage());
+          document.getElementById('chat-check-btn').addEventListener('click', () => this.runDiagnostics());
           document.getElementById('export-csv-btn').addEventListener('click', () => this.exportResults('csv'));
           document.getElementById('export-xlsx-btn').addEventListener('click', () => this.exportResults('xlsx'));
           document.getElementById('modal-close').addEventListener('click', () => this.closeModal());
@@ -1334,33 +1368,67 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
             if (this._turnHadToolError && !this._turnHadAnswer) {
               await this.sendAgentTurn(message, false);
             }
-            if (!this._turnHadAnswer) {
-              this.addChatMessage(
-                'assistant',
-                'I can walk you through import, saved tables, review, export, or mailing settings. What do you want to do next?',
-              );
-            }
+            if (!this._turnHadAnswer) this.answerLocally(message, 'The model returned no answer.');
           } catch (error) {
-            const text = String(error?.message || error);
+            const first = String(error?.message || error);
             try {
-              if (/source record|not found|catalog|session/i.test(text)) {
-                this.currentChatId = null;
-                await this.ensureChatSession();
-                await this.sendAgentTurn(message, false);
-              } else {
-                throw error;
-              }
-            } catch {
-              this.addChatMessage(
-                'assistant',
-                'The chat turn failed. Ask me about this step, or use the stage cards on the left.',
-              );
+              this.currentChatId = null;
+              await this.ensureChatSession();
+              await this.sendAgentTurn(message, false);
+              if (!this._turnHadAnswer) this.answerLocally(message, first);
+            } catch (retryError) {
+              this.answerLocally(message, `${first} / ${String(retryError?.message || retryError)}`);
             }
           } finally {
             input.disabled = false;
             document.getElementById('send-chat-btn').disabled = false;
             input.focus();
           }
+        }
+
+        answerLocally(question, reason) {
+          console.error('Chat fell back to local answer:', reason);
+          this.addChatMessage('assistant', localAnswer(question));
+          this.addChatMessage('note', `Answered from the built-in guide. Platform chat said: ${reason}`);
+        }
+
+        async runDiagnostics() {
+          const button = document.getElementById('chat-check-btn');
+          button.disabled = true;
+          const lines = [];
+          try {
+            const result = await this.agentPost('/tables/list');
+            lines.push(`Agent tab: reachable, ${(result.records || []).length} saved tables.`);
+          } catch (error) {
+            lines.push(`Agent tab: FAILED — ${error.message}`);
+          }
+          this.currentChatId = null;
+          try {
+            await this.ensureChatSession();
+            lines.push(`Chat session: created (${this.currentChatId}).`);
+          } catch (error) {
+            lines.push(`Chat session: FAILED — ${error.message}`);
+          }
+          if (this.currentChatId) {
+            try {
+              await this.sendAgentTurn('Reply with the word ready.', false);
+              lines.push(this._turnHadAnswer
+                ? 'Chat send without tools: OK.'
+                : 'Chat send without tools: no answer returned.');
+            } catch (error) {
+              lines.push(`Chat send without tools: FAILED — ${error.message}`);
+            }
+            try {
+              await this.sendAgentTurn('Reply with the word ready.', true);
+              lines.push(this._turnHadAnswer
+                ? 'Chat send with tools: OK.'
+                : 'Chat send with tools: no answer returned.');
+            } catch (error) {
+              lines.push(`Chat send with tools: FAILED — ${error.message}`);
+            }
+          }
+          this.addChatMessage('note', lines.join('\n'));
+          button.disabled = false;
         }
 
         addChatMessage(role, content) {
