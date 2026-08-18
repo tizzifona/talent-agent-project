@@ -1,6 +1,7 @@
-title: Talent Agent - Data Deduplication System
-description: Multi-database deduplication and matching system with AI assistance
+title: Talent Agent v2
+description: Unified talent dashboard after identity resolution, with structured memory
 icon: https://tizzifona.github.io/talent-agent-project/images/icon-heart.png
+prefix: talent/v2
 
 scope:
   chat:
@@ -8,9 +9,9 @@ scope:
   useTools:
     description: Can use MCP tools for data processing
   read_memory:
-    description: Can query semantic memory for insights
+    description: Can query the unified person graph in structured memory
   write_memory:
-    description: Can store processing results in memory
+    description: Can persist matching results to structured memory
   process_data:
     description: Can process CSV data and perform matching
   expertAsk:
@@ -36,15 +37,11 @@ tab:
     ttl: 300
     config:
       systemPrompt: |
-        You are a data deduplication expert assistant. You help users:
-        1. Analyze matching results between multiple databases
-        2. Suggest improvements to matching rules and thresholds
-        3. Identify potential false positives/negatives
-        4. Provide insights on data quality issues
-        5. Generate detailed reports and recommendations
-
-        You have access to semantic memory containing deduplication results and provenance data.
-        Use your knowledge to help users make informed decisions about ambiguous matches.
+        You are a talent-data assistant for Blue Hope.
+        Help users work with the unified person table after identity resolution.
+        Explain match confidence, provenance, and review reasons.
+        Canonical records live in structured memory and survive refresh.
+        Do not invent employment status.
 
 mcp:
   tab: agent
