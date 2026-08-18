@@ -1,6 +1,5 @@
 import { applyFilters } from './filters.ts';
-
-const cleanKey = (key: string): string => key.toLowerCase().replace(/[\s_\-./:()]+/g, '');
+import { cleanKey, mapUnifiedFields, sourceDatabaseTag } from './field-map.ts';
 
 const toString = (val: unknown): string => {
   if (val === null || val === undefined) return '';
@@ -327,16 +326,14 @@ export function normalizeRecord(record: Record<string, any>, sourceFileName = ''
   normalized.lastModified = excelSerialToIso(modDateRaw || record['Last Modified']);
   normalized.eventDate = normalized.applicationDate || normalized.lastModified || '';
 
-  // --- Skills / languages (with broken-array cleanup) ---
+  // --- Skills (with broken-array cleanup). Languages are a separate unified field
+  // (Spec table E) and must not be mixed into the skill list. ---
   const skillPreds = [
     (c: string) => c.includes('skill'),
     (c: string) =>
       ['competencies', 'competences', 'expertise', 'techstack', 'technologies',
         'specialization', 'specialisation', 'keyskills', 'softskills', 'observedstrengths']
         .includes(c),
-  ];
-  const languagePreds = [
-    (c: string) => c.includes('language'),
   ];
 
   const skills: string[] = [];
@@ -345,12 +342,26 @@ export function normalizeRecord(record: Record<string, any>, sourceFileName = ''
       if (!skills.includes(part)) skills.push(part);
     }
   }
-  for (const raw of findAllValues(record, languagePreds)) {
-    for (const part of parseBrokenArrayField(raw)) {
-      if (!skills.includes(part)) skills.push(part);
-    }
-  }
   normalized.skills = skills;
+
+  // --- Unified table fields (sections B-G of the consolidation spec) ---
+  normalized.unified = mapUnifiedFields(record, parseBrokenArrayField);
+  normalized.sourceDatabase = sourceDatabaseTag(normalized.sourceType);
+  if (!normalized.unified.country_of_origin && normalized.countryOfOrigin) {
+    normalized.unified.country_of_origin = normalized.countryOfOrigin;
+  }
+  if (!normalized.unified.country_of_residence && normalized.countryOfResidence) {
+    normalized.unified.country_of_residence = normalized.countryOfResidence;
+  }
+
+  // Second distinct email on the same row becomes secondary_email (Spec table C).
+  const allEmails: string[] = [];
+  for (const raw of findAllValues(record, [(c) => c.includes('email') && !c.includes('ngo') && !c.includes('worker')])) {
+    const parsed = normalizeEmailValue(raw);
+    if (parsed.email && !allEmails.includes(parsed.email)) allEmails.push(parsed.email);
+  }
+  const secondary = allEmails.find((mail) => mail !== normalized.email);
+  if (secondary) normalized.unified.secondary_email = secondary;
 
   // Source 2 readiness score precedent (Sec. 7) — carry forward, do not use for matching.
   const readiness = findValue(record, [

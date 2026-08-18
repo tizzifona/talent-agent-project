@@ -4,6 +4,7 @@ import { Token } from '$static/lib/js/Token.js';
 import { runMatching } from './matcher.ts';
 import { normalizeRecord } from './normalize.ts';
 import { memoryAvailable } from './memory.ts';
+import { listConsents } from './consent-store.ts';
 import {
   exportPersonRows,
   getPerson,
@@ -35,7 +36,9 @@ Answer how-to and product questions from this description. Do not call index_sea
 Only query structured memory collections bh-talent-persons, bh-talent-tables, bh-talent-internal, bh-talent-runs, and bh-talent-review-actions when the user asks about people or saved tables.
 Never call index_resolve without a key returned by index_search.
 If a tool fails, answer from this guide instead of repeating the platform error.
-Do not invent employment status. Empty employment_status is a verification segment, not a guess.`;
+Do not invent employment status. Empty employment_status is a verification segment, not a guess.
+The unified table follows the consolidation spec: candidate_id, source_database (BD1-BD7), name, demographics and location, contact details, legal status and work permission, languages and education, professional experience and skills.
+Consents (privacy_policy_accepted, data_processing_consent, future_contact_consent) live in bh-talent-consents as separate fields. refugee_status is sensitive and is excluded from exports by default.`;
 
 const agent = new GenerativeChatAgent({
   targetScope: 'chat useTools read_memory write_memory',
@@ -210,6 +213,11 @@ Deno.serve({ port: 0 }, async (request) => {
     if (url.pathname.endsWith('/persons/export') && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       return response({ ok: { records: await exportPersonRows(body?.runId) } });
+    }
+
+    if (url.pathname.endsWith('/consents/list') && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      return response({ ok: { records: await listConsents(body?.runId) } });
     }
 
     if (url.pathname.endsWith('/internal/list') && request.method === 'POST') {

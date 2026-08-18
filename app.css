@@ -692,7 +692,7 @@ body {
 
 .detail-grid {
   display: grid;
-  grid-template-columns: 140px 1fr;
+  grid-template-columns: 190px 1fr;
   gap: 8px 16px;
   margin-bottom: 20px;
 }
@@ -701,6 +701,25 @@ body {
   color: var(--text-muted);
   font-size: 0.88rem;
   font-weight: 700;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.inline-check input {
+  accent-color: var(--teal);
+  width: 16px;
+  height: 16px;
 }
 
 .merge-modal label {

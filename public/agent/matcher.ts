@@ -1,8 +1,12 @@
+import { UNIFIED_FIELD_NAMES } from './field-map.ts';
+
 interface DatabaseRecord {
   sourceDb: string;
   rowIndex: number;
   sourceType?: number;
   sourceFile?: string;
+  sourceDatabase?: string;
+  unified?: Record<string, string>;
   firstName?: string;
   lastName?: string;
   fullName?: string;
@@ -54,6 +58,8 @@ interface MatchedPerson {
   primaryLastName?: string;
   country?: string;
   skills?: string[];
+  unified?: Record<string, string>;
+  sourceDatabases?: string[];
   matchType: 'email' | 'phone' | 'source-id' | 'fuzzy-auto' | 'manual-review' | 'held-out' | 'no-match';
   matchConfidence: MatchConfidence;
   confidence: number;
@@ -147,6 +153,15 @@ function collectSkills(records: DatabaseRecord[]): string[] {
   return Array.from(skills);
 }
 
+// Spec Sec. 2 — a merged person keeps every source database it came from.
+function collectSourceDatabases(records: DatabaseRecord[]): string[] {
+  const tags = new Set<string>();
+  for (const record of records) {
+    if (record.sourceDatabase) tags.add(record.sourceDatabase);
+  }
+  return Array.from(tags).sort();
+}
+
 function mostRecentRecord(records: DatabaseRecord[]): DatabaseRecord {
   return [...records].sort((a, b) => {
     const aMs = parseDateMs(a.lastModified) ?? parseDateMs(a.applicationDate) ?? 0;
@@ -215,7 +230,7 @@ function buildPerson(
   confidence: number,
   extra?: { needsReview?: boolean; reviewReason?: string; heldOut?: boolean },
 ): MatchedPerson {
-  const fields = {
+  const fields: Record<string, FieldProvenance> = {
     firstName: resolveField(records, (r) => r.firstName || '', matchConfidence),
     lastName: resolveField(records, (r) => r.lastName || '', matchConfidence),
     fullName: resolveField(records, (r) => getFullName(r), matchConfidence),
@@ -228,9 +243,23 @@ function buildPerson(
     ),
   };
 
+  // Sections B-G resolve through the same Sec. 6 rule: most recent wins, a populated
+  // value is never replaced by a blank, and every discarded value stays in provenance.
+  const unified: Record<string, string> = {};
+  for (const name of UNIFIED_FIELD_NAMES) {
+    const resolved = resolveField(records, (r) => r.unified?.[name] || '', matchConfidence);
+    if (resolved.value) {
+      unified[name] = resolved.value;
+      fields[name] = resolved;
+    }
+  }
+
   const testRow = records.find((r) => r.isTestRow);
   const manualFlag = records.find((r) => r.needsManualFlag);
-  const hasUnresolvedConflict = Object.values(fields).some((f) => f.overwritten_values.length > 0);
+  // Only identity-bearing conflicts escalate. Conflicts on descriptive fields are
+  // logged in provenance without pushing every merged person into the review queue.
+  const hasUnresolvedConflict = ['firstName', 'lastName', 'fullName', 'email', 'phone']
+    .some((name) => (fields[name]?.overwritten_values.length || 0) > 0);
 
   let needsReview = !!extra?.needsReview || !!testRow || !!manualFlag;
   let reviewReason = extra?.reviewReason ||
@@ -256,6 +285,8 @@ function buildPerson(
     primaryPhone: fields.phone.value,
     country: fields.country.value,
     skills: collectSkills(records),
+    unified,
+    sourceDatabases: collectSourceDatabases(records),
     matchType,
     matchConfidence,
     confidence,

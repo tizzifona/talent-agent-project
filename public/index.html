@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Talent Agent v2</title>
-    <link rel="webdaemon" href="app.yml">
+    <link rel="webdaemon" href="app.yml" prefix="talent/v2">
     <link rel="icon" type="image/png" href="images/icon-heart.png">
     <link rel="apple-touch-icon" href="images/icon-heart.png">
     <meta property="og:title" content="Talent Agent v2">
@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=4">
+    <link rel="stylesheet" href="app.css?v=5">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -235,6 +235,9 @@
               <div class="btn-row">
                 <button id="export-csv-btn" class="secondary-btn">Export CSV</button>
                 <button id="export-xlsx-btn" class="secondary-btn">Export Excel</button>
+                <label class="inline-check" title="Refugee status is sensitive and is left out of exported files by default">
+                  <input type="checkbox" id="export-sensitive"> Include refugee status
+                </label>
                 <button data-view="mailing" class="primary-btn">Continue to mailing</button>
               </div>
             </section>
@@ -332,17 +335,25 @@
         from 'https://webdaemon.online/latest/static/lib/dist/index.js';
 
       const PAGE_SIZE = 25;
+      const DECLARED_PREFIX = 'talent/v2';
       const CHAT_SYSTEM_PROMPT = `You are the on-screen assistant for Blue Hope Talent Agent.
 The product has three stages:
 1. Upload and deduplicate CSV or Excel files into one person per contact (email, then phone, then a cautious name check; uncertain rows go to review).
 2. Saved tables: preview people, rename, export CSV or Excel, review, or delete from the library.
 3. Mailing settings: choose a table and a segment. Sending is not enabled yet.
 
+The unified table follows the consolidation spec: candidate_id and source_database (BD1-BD7); first_name and last_names; gender, age, country_of_origin, country_of_residence, city_of_residence; primary_email, secondary_email, phone_number, preferred_contact_method, linkedin_url; legal_status, refugee_status, work_permission; languages, english_level (A1-C2, Native, Unknown), highest_education_level, field_of_study, courses_and_certifications; work_experience_summary, years_of_experience, has_tech_experience, github_url, technical_skills, key_skills.
+Consents live in their own collection with privacy_policy_accepted, data_processing_consent, and future_contact_consent as separate fields. refugee_status is sensitive and is left out of exported files unless the operator ticks the box.
+
 Answer how-to and product questions from this description. Do not call index_search, index_resolve, or structured_get for those questions.
-Only query structured memory collections bh-talent-persons, bh-talent-tables, bh-talent-internal, bh-talent-runs, and bh-talent-review-actions when the user asks about people or saved tables.
+Only query structured memory collections bh-talent-persons, bh-talent-tables, bh-talent-internal, bh-talent-runs, bh-talent-consents, and bh-talent-review-actions when the user asks about people or saved tables.
 Never call index_resolve without a key returned by index_search.
 If a tool fails, answer from this guide. Do not invent employment_status.`;
       const LOCAL_ANSWERS = [
+        {
+          match: /field|column|schema|consent|permission|privacy|refugee|language level|english level/i,
+          text: 'The table uses the unified schema: candidate_id and source_database (BD1-BD7), name, demographics and location, contact details, legal status and work permission, languages and education, and professional experience with technical and key skills. English level is mapped onto A1-C2, Native, or Unknown, and the original wording is kept next to it. The three consents (privacy policy, data processing, future contact) are stored separately, never merged into one Permission column. Refugee status is sensitive, so it stays out of exported files unless you tick the box next to the export buttons.',
+        },
         {
           match: /review|merge|confirm|reject|uncertain|duplicate\?/i,
           text: 'Review holds rows the matcher could not decide alone. Open a saved table, switch to Review, then confirm the person, reject them (they stay held out), or merge them into another person. Every decision is recorded and survives a re-import.',
@@ -431,6 +442,14 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
             document.getElementById('daemon-party').textContent = party;
             document.getElementById('connection-status').textContent = 'Connected';
             document.getElementById('connection-status').classList.add('connected');
+
+            const prefix = await this.detectAgentPrefix();
+            if (!prefix) {
+              this.addChatMessage(
+                'note',
+                'The daemon has no agent tab at this address. Re-open the app from your Web Daemon shell so it reloads app.yml.',
+              );
+            }
 
             const clientTools = createDefaultBrowserChatTools(this.app);
             this.chatClient = new GenerativeChatClient({
@@ -602,6 +621,22 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
           if (panel === 'people') this.loadPeople();
         }
 
+        async detectAgentPrefix() {
+          const link = document.querySelector('link[rel=webdaemon]');
+          const candidates = [DECLARED_PREFIX, await this.app.getDefaultPrefix()];
+          for (const prefix of candidates) {
+            link.setAttribute('prefix', prefix);
+            try {
+              await this.agentPost('/tables/list');
+              return prefix;
+            } catch (error) {
+              if (!/no source record/i.test(String(error?.message || error))) return prefix;
+            }
+          }
+          link.setAttribute('prefix', DECLARED_PREFIX);
+          return null;
+        }
+
         async safeListTables() {
           try {
             const result = await this.agentPost('/tables/list');
@@ -690,8 +725,9 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
         renderPeopleRows(records, bodyId, includeReviewReason = false) {
           const body = document.getElementById(bodyId);
           body.innerHTML = records.map((person) => {
-            const name = person.full_name || [person.first_name, person.last_name].filter(Boolean).join(' ') || '-';
-            const skills = String(person.skill_tags || '').split(' | ').filter(Boolean).slice(0, 4).join(', ') || '-';
+            const name = person.full_name || [person.first_name, person.last_names].filter(Boolean).join(' ') || '-';
+            const skillSource = person.technical_skills || person.key_skills || person.skill_tags || '';
+            const skills = String(skillSource).split(' | ').filter(Boolean).slice(0, 4).join(', ') || '-';
             const review = person.needs_review
               ? `<span class="match-badge manual-review" title="${escapeHtml(person.review_reason || '')}">Review</span>`
               : '';
@@ -701,9 +737,9 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
             return `
               <tr class="${person.needs_review ? 'needs-review-row' : ''}">
                 <td><button class="person-link" data-person-id="${escapeHtml(person.id)}">${escapeHtml(name)}</button></td>
-                <td>${escapeHtml(person.email || '-')}</td>
-                <td>${escapeHtml(person.phone || '-')}</td>
-                <td>${escapeHtml(person.country || '-')}</td>
+                <td>${escapeHtml(person.primary_email || '-')}</td>
+                <td>${escapeHtml(person.phone_number || '-')}</td>
+                <td>${escapeHtml(person.country_of_residence || person.country || '-')}</td>
                 <td>${escapeHtml(skills)}</td>
                 <td><span class="match-badge ${escapeHtml(person.match_type || '')}">${escapeHtml(person.match_type || '-')}</span></td>
                 <td>${escapeHtml(person.match_confidence || '')}</td>
@@ -827,7 +863,7 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
             }).join('');
             const sources = (person.sources || []).map((source) => `
               <tr>
-                <td>${escapeHtml(source.source_file || '')}</td>
+                <td>${escapeHtml(source.source_file || '')}${source.source_database ? ` <span class="muted">${escapeHtml(source.source_database)}</span>` : ''}</td>
                 <td>${escapeHtml(source.source_row_id || '')}</td>
                 <td>${escapeHtml(source.name || '')}</td>
                 <td>${escapeHtml(source.email || '')}</td>
@@ -838,11 +874,28 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
             document.getElementById('report-content').innerHTML = `
               ${person.needs_review ? `<div class="row-actions modal-actions">${this.reviewActions(person)}</div>` : ''}
               <dl class="detail-grid">
-                <dt>Person ID</dt><dd><code>${escapeHtml(person.id)}</code></dd>
-                <dt>Email</dt><dd>${escapeHtml(person.email || '-')}</dd>
-                <dt>Phone</dt><dd>${escapeHtml(person.phone || '-')}</dd>
-                <dt>Country</dt><dd>${escapeHtml(person.country || '-')}</dd>
-                <dt>Skills</dt><dd>${escapeHtml(person.skill_tags || '-')}</dd>
+                <dt>Candidate ID</dt><dd><code>${escapeHtml(person.candidate_id || '-')}</code> <span class="muted">${escapeHtml(person.id)}</span></dd>
+                <dt>Source databases</dt><dd>${escapeHtml(person.source_database || '-')}</dd>
+                <dt>Primary email</dt><dd>${escapeHtml(person.primary_email || '-')}</dd>
+                <dt>Secondary email</dt><dd>${escapeHtml(person.secondary_email || '-')}</dd>
+                <dt>Phone</dt><dd>${escapeHtml(person.phone_number || '-')}</dd>
+                <dt>Preferred contact</dt><dd>${escapeHtml(person.preferred_contact_method || '-')}</dd>
+                <dt>LinkedIn</dt><dd>${escapeHtml(person.linkedin_url || '-')}</dd>
+                <dt>GitHub</dt><dd>${escapeHtml(person.github_url || '-')}</dd>
+                <dt>Origin / residence</dt><dd>${escapeHtml(person.country_of_origin || '-')} → ${escapeHtml(person.country_of_residence || person.country || '-')}${person.city_of_residence ? ', ' + escapeHtml(person.city_of_residence) : ''}</dd>
+                <dt>Gender / age</dt><dd>${escapeHtml(person.gender || '-')} / ${escapeHtml(person.age || '-')}</dd>
+                <dt>Legal status</dt><dd>${escapeHtml(person.legal_status || '-')}</dd>
+                <dt>Refugee status</dt><dd>${escapeHtml(person.refugee_status || '-')} <span class="muted">sensitive, excluded from exports</span></dd>
+                <dt>Work permission</dt><dd>${escapeHtml(person.work_permission || '-')}</dd>
+                <dt>Languages</dt><dd>${escapeHtml(person.languages || '-')}</dd>
+                <dt>English level</dt><dd>${escapeHtml(person.english_level || '-')}${person.english_level_raw ? ` <span class="muted">(source: ${escapeHtml(person.english_level_raw)})</span>` : ''}</dd>
+                <dt>Education</dt><dd>${escapeHtml(person.highest_education_level || '-')}${person.field_of_study ? ' · ' + escapeHtml(person.field_of_study) : ''}</dd>
+                <dt>Courses</dt><dd>${escapeHtml(person.courses_and_certifications || '-')}</dd>
+                <dt>Experience</dt><dd>${escapeHtml(person.work_experience_summary || '-')}</dd>
+                <dt>Years / tech experience</dt><dd>${escapeHtml(person.years_of_experience || '-')} / ${escapeHtml(person.has_tech_experience || 'unknown')}</dd>
+                <dt>Technical skills</dt><dd>${escapeHtml(person.technical_skills || '-')}</dd>
+                <dt>Key skills</dt><dd>${escapeHtml(person.key_skills || '-')}</dd>
+                <dt>Skill tags</dt><dd>${escapeHtml(person.skill_tags || '-')}</dd>
                 <dt>Match</dt><dd>${escapeHtml(person.match_type || '')} / ${escapeHtml(person.match_confidence || '')}</dd>
                 <dt>Employment</dt><dd>${escapeHtml(person.employment_status || 'unknown')}</dd>
                 <dt>Seniority</dt><dd>${escapeHtml(person.seniority || '-')}</dd>
@@ -881,12 +934,12 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
         }
 
         mergeHitHtml(person, label) {
-          const name = person.full_name || [person.first_name, person.last_name].filter(Boolean).join(' ') || person.id;
+          const name = person.full_name || [person.first_name, person.last_names].filter(Boolean).join(' ') || person.id;
           return `
             <div class="merge-hit">
               <div>
                 <strong>${escapeHtml(name)}</strong>
-                <div class="upload-hint">${escapeHtml(person.email || '-')} · ${escapeHtml(person.country || '-')}</div>
+                <div class="upload-hint">${escapeHtml(person.primary_email || '-')} · ${escapeHtml(person.country_of_residence || person.country || '-')}</div>
               </div>
               <button class="action-btn" data-review-action="merge" data-target-id="${escapeHtml(person.id)}">${escapeHtml(label)}</button>
             </div>
@@ -1138,25 +1191,53 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
         }
 
         personToRow(person) {
-          return {
-            'Person ID': person.id || person.person_id || '',
-            'First Name': person.first_name || person.primaryFirstName || '',
-            'Last Name': person.last_name || person.primaryLastName || '',
-            'Full Name': person.full_name || person.primaryName || '',
-            'Primary Email': person.email || person.primaryEmail || '',
-            'Primary Phone': person.phone || person.primaryPhone || '',
-            'Country': person.country || '',
-            'Skills': person.skill_tags || (person.skills || []).join(' | '),
-            'Match Type': person.match_type || person.matchType || '',
-            'Match Confidence': person.match_confidence || person.matchConfidence || '',
-            'Confidence (%)': person.confidence_pct || person.confidence || '',
-            'Needs Review': (person.needs_review || person.needsReview) ? 'YES' : '',
-            'Review Reason': person.review_reason || person.reviewReason || '',
-            'Record Count': person.record_count || (person.records ? person.records.length : 0),
-            'Provenance (Sources)': person.provenance_text || (person.provenance || []).join(' | '),
-            'All Emails': person.all_emails || '',
-            'All Phones': person.all_phones || '',
+          const row = {
+            candidate_id: person.candidate_id || '',
+            source_database: person.source_database || '',
+            first_name: person.first_name || person.primaryFirstName || '',
+            last_names: person.last_names || person.primaryLastName || '',
+            gender: person.gender || '',
+            age: person.age || '',
+            country_of_origin: person.country_of_origin || '',
+            country_of_residence: person.country_of_residence || person.country || '',
+            city_of_residence: person.city_of_residence || '',
+            primary_email: person.primary_email || person.primaryEmail || '',
+            secondary_email: person.secondary_email || '',
+            phone_number: person.phone_number || person.primaryPhone || '',
+            preferred_contact_method: person.preferred_contact_method || '',
+            linkedin_url: person.linkedin_url || '',
+            legal_status: person.legal_status || '',
+            work_permission: person.work_permission || '',
+            languages: person.languages || '',
+            english_level: person.english_level || '',
+            highest_education_level: person.highest_education_level || '',
+            field_of_study: person.field_of_study || '',
+            courses_and_certifications: person.courses_and_certifications || '',
+            work_experience_summary: person.work_experience_summary || '',
+            years_of_experience: person.years_of_experience || '',
+            has_tech_experience: person.has_tech_experience || '',
+            github_url: person.github_url || '',
+            technical_skills: person.technical_skills || '',
+            key_skills: person.key_skills || '',
+            skill_tags: person.skill_tags || (person.skills || []).join(' | '),
+            employment_status: person.employment_status || '',
+            seniority: person.seniority || '',
+            match_type: person.match_type || person.matchType || '',
+            match_confidence: person.match_confidence || person.matchConfidence || '',
+            needs_review: (person.needs_review || person.needsReview) ? 'YES' : '',
+            review_reason: person.review_reason || person.reviewReason || '',
+            record_count: person.record_count || (person.records ? person.records.length : 0),
+            provenance: person.provenance_text || (person.provenance || []).join(' | '),
           };
+          // refugee_status is sensitive and stays out of files unless explicitly requested.
+          if (this.includeSensitiveFields()) {
+            row.refugee_status = person.refugee_status || '';
+          }
+          return row;
+        }
+
+        includeSensitiveFields() {
+          return !!document.getElementById('export-sensitive')?.checked;
         }
 
         async exportResults(format = 'csv') {
