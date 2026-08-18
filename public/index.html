@@ -10,11 +10,16 @@
     <meta property="og:title" content="Talent Agent v2">
     <meta property="og:description" content="Unified talent dashboard after identity resolution">
     <meta property="og:image" content="https://tizzifona.github.io/talent-agent-project/images/icon-heart.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="app.css">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
     <div id="app" class="shell">
+      <div class="grid-lines" aria-hidden="true"></div>
+      <div class="teal-glow" aria-hidden="true"></div>
       <header class="topbar">
         <button id="home-btn" class="brand">Talent Agent</button>
         <p id="crumb" class="crumb">Welcome</p>
@@ -29,15 +34,18 @@
           <p class="lede">This app takes overlapping talent files, builds one person per contact, and keeps that table ready for review, export, or outreach. The assistant on the right stays with you on every step.</p>
           <div class="intro-list">
             <div class="intro-item">
-              <strong>1. Import and deduplicate</strong>
+              <span class="choice-num">01 · Import</span>
+              <strong>Deduplicate overlapping files</strong>
               <span>Upload CSV or Excel sources. Matching uses email, then phone, then a cautious name check. Uncertain rows go to review instead of being guessed.</span>
             </div>
             <div class="intro-item">
-              <strong>2. Keep a working table</strong>
+              <span class="choice-num">02 · Tables</span>
+              <strong>Keep a working table</strong>
               <span>Each successful run is saved. You can preview people, rename the table, export CSV or Excel, or remove it from the library.</span>
             </div>
             <div class="intro-item">
-              <strong>3. Prepare outreach later</strong>
+              <span class="choice-num">03 · Outreach</span>
+              <strong>Prepare mailing later</strong>
               <span>When a table is ready, mailing settings let you choose who would be contacted. Sending still belongs to the re-engagement step; this page only prepares the segment.</span>
             </div>
           </div>
@@ -52,16 +60,19 @@
           <p class="lede">Pick one path. You can come back here from the title at any time.</p>
           <div class="choice-grid">
             <button class="choice-card" data-view="import">
+              <span class="choice-num">01 · Discovery</span>
               <h2>Upload and deduplicate</h2>
               <p>Add new source files and build a unified person table.</p>
               <p class="when">Use this when you have CSV or Excel exports that still need identity resolution.</p>
             </button>
             <button class="choice-card" data-view="tables">
+              <span class="choice-num">02 · Working table</span>
               <h2>Saved tables</h2>
               <p>Preview, rename, upload another run, or delete a finished table.</p>
               <p class="when">Use this when matching already ran and you want to work with the result.</p>
             </button>
             <button class="choice-card" data-view="mailing">
+              <span class="choice-num">03 · Outreach</span>
               <h2>Mailing from a table</h2>
               <p>Choose a saved table and a segment for outreach. Nothing is sent from this screen yet.</p>
               <p class="when">Use this after review, when the list is clean enough to message.</p>
@@ -273,9 +284,9 @@
       <aside class="agent-rail">
         <div class="agent-head">
           <h2>Assistant</h2>
-          <span class="agent-live">On</span>
+          <span class="agent-live">Active</span>
         </div>
-        <p class="agent-role">I stay on every step: import, tables, review, and mailing. Daemon: <strong id="daemon-party">...</strong></p>
+        <p class="agent-role">On every step — import, tables, review, mailing. Daemon <strong id="daemon-party">...</strong></p>
         <div id="chat-messages" class="chat-container"></div>
         <div class="chat-input-container">
           <input type="text" id="chat-input" placeholder="Ask about this step..." disabled>
@@ -318,6 +329,16 @@
         from 'https://webdaemon.online/latest/static/lib/dist/index.js';
 
       const PAGE_SIZE = 25;
+      const CHAT_SYSTEM_PROMPT = `You are the on-screen assistant for Blue Hope Talent Agent.
+The product has three stages:
+1. Upload and deduplicate CSV or Excel files into one person per contact (email, then phone, then a cautious name check; uncertain rows go to review).
+2. Saved tables: preview people, rename, export CSV or Excel, review, or delete from the library.
+3. Mailing settings: choose a table and a segment. Sending is not enabled yet.
+
+Answer how-to and product questions from this description. Do not call index_search, index_resolve, or structured_get for those questions.
+Only query structured memory collections bh-talent-persons, bh-talent-tables, bh-talent-internal, bh-talent-runs, and bh-talent-review-actions when the user asks about people or saved tables.
+Never call index_resolve without a key returned by index_search.
+If a tool fails, answer from this guide. Do not invent employment_status.`;
       const AGENT_GUIDES = {
         welcome: 'This app builds one person per contact from overlapping talent files, then lets you review, export, or prepare mailing. I stay on the right for every step.',
         hub: 'Pick one path. Import if you have new files. Saved tables if matching already ran. Mailing when a table is ready to message.',
@@ -385,6 +406,11 @@
               clientTools,
             });
             await this.chatClient.init();
+            try {
+              await this.ensureChatSession();
+            } catch (error) {
+              console.error('Chat session failed:', error);
+            }
 
             document.getElementById('chat-input').disabled = false;
             document.getElementById('send-chat-btn').disabled = false;
@@ -1259,6 +1285,41 @@
           await this.handleTableAction(tableId, 'preview');
         }
 
+        async ensureChatSession() {
+          if (this.currentChatId || !this.chatClient) return;
+          const session = await this.chatClient.createSession({
+            targetParty: this.app.getParty(),
+            systemPrompt: CHAT_SYSTEM_PROMPT,
+          });
+          this.currentChatId = session.chatId;
+        }
+
+        handleChatEvent(event) {
+          if (event.role === 'tool' || event.role === 'tool-result' || event.role === 'thinking') {
+            return;
+          }
+          if (event.role !== 'assistant' || !event.content) return;
+          if (event.error) {
+            this._turnHadToolError = true;
+            return;
+          }
+          this._turnHadAnswer = true;
+          this.addChatMessage('assistant', event.content);
+        }
+
+        async sendAgentTurn(message, toolsEnabled) {
+          this._turnHadAnswer = false;
+          this._turnHadToolError = false;
+          await this.chatClient.sendMessage({
+            targetParty: this.app.getParty(),
+            chatId: this.currentChatId,
+            message,
+            toolsEnabled,
+            toolDetails: true,
+            onEvent: (event) => this.handleChatEvent(event),
+          });
+        }
+
         async sendChatMessage() {
           const input = document.getElementById('chat-input');
           const message = input.value.trim();
@@ -1268,23 +1329,33 @@
           document.getElementById('send-chat-btn').disabled = true;
           this.addChatMessage('user', message);
           try {
-            const targetParty = this.app.getParty();
-            if (!this.currentChatId) {
-              const session = await this.chatClient.createSession({ targetParty });
-              this.currentChatId = session.chatId;
+            await this.ensureChatSession();
+            await this.sendAgentTurn(message, true);
+            if (this._turnHadToolError && !this._turnHadAnswer) {
+              await this.sendAgentTurn(message, false);
             }
-            await this.chatClient.sendMessage({
-              targetParty,
-              chatId: this.currentChatId,
-              message,
-              toolsEnabled: true,
-              toolDetails: true,
-              onEvent: (event) => {
-                if (event.role === 'assistant') this.addChatMessage('assistant', event.content);
-              },
-            });
+            if (!this._turnHadAnswer) {
+              this.addChatMessage(
+                'assistant',
+                'I can walk you through import, saved tables, review, export, or mailing settings. What do you want to do next?',
+              );
+            }
           } catch (error) {
-            this.addChatMessage('assistant', `Error: ${error?.message || error}`);
+            const text = String(error?.message || error);
+            try {
+              if (/source record|not found|catalog|session/i.test(text)) {
+                this.currentChatId = null;
+                await this.ensureChatSession();
+                await this.sendAgentTurn(message, false);
+              } else {
+                throw error;
+              }
+            } catch {
+              this.addChatMessage(
+                'assistant',
+                'The chat turn failed. Ask me about this step, or use the stage cards on the left.',
+              );
+            }
           } finally {
             input.disabled = false;
             document.getElementById('send-chat-btn').disabled = false;

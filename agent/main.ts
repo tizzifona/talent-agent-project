@@ -25,11 +25,16 @@ import {
   renameTable,
 } from './table-store.ts';
 
-const systemPrompt = `You are a talent-data assistant for Blue Hope.
-Help users work with the unified person graph after identity resolution.
-You can explain match confidence, provenance, review reasons, and data quality.
-The canonical table lives in structured memory (bh-talent-persons) and survives refresh.
-Reviewers can confirm, reject, or merge queued rows; those decisions are audited.
+const systemPrompt = `You are the on-screen assistant for Blue Hope Talent Agent.
+The product has three stages:
+1. Upload and deduplicate CSV or Excel files into one person per contact (email, then phone, then a cautious name check; uncertain rows go to review).
+2. Saved tables: preview people, rename, export CSV or Excel, review, or delete from the library.
+3. Mailing settings: choose a table and a segment. Sending is not enabled yet.
+
+Answer how-to and product questions from this description. Do not call index_search, index_resolve, or structured_get for those questions.
+Only query structured memory collections bh-talent-persons, bh-talent-tables, bh-talent-internal, bh-talent-runs, and bh-talent-review-actions when the user asks about people or saved tables.
+Never call index_resolve without a key returned by index_search.
+If a tool fails, answer from this guide instead of repeating the platform error.
 Do not invent employment status. Empty employment_status is a verification segment, not a guess.`;
 
 const agent = new GenerativeChatAgent({
@@ -161,6 +166,22 @@ async function handleRunMatching(request: Request): Promise<Response> {
 
 Deno.serve({ port: 0 }, async (request) => {
   const url = new URL(request.url);
+  const path = url.pathname;
+  const isPlatformChat = (
+    path.endsWith('/session')
+    || path.endsWith('/send')
+    || path.endsWith('/settings')
+    || path.endsWith('/models')
+    || path.endsWith('/chats')
+    || path.endsWith('/client-tool-results')
+    || path.endsWith('/close')
+    || path === '/delete'
+    || path.endsWith('/rpc')
+    || path.includes('/daemon/')
+  );
+  if (isPlatformChat) {
+    return agent.handler(request);
+  }
 
   try {
     if (url.pathname.endsWith('/run-matching') && request.method === 'POST') {
