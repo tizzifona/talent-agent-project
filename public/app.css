@@ -780,6 +780,71 @@ footer strong {
   word-break: break-word;
 }
 
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.modal-actions {
+  margin-bottom: 20px;
+}
+
+.action-btn {
+  width: auto;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--primary-dark);
+  cursor: pointer;
+}
+
+.action-btn:hover {
+  border-color: var(--accent-teal);
+  color: var(--accent-teal);
+}
+
+.action-btn.danger {
+  color: var(--danger-color);
+  border-color: var(--danger-color);
+}
+
+.action-btn.danger:hover {
+  background: var(--danger-color);
+  color: white;
+}
+
+.merge-modal {
+  max-width: 640px;
+}
+
+.merge-modal label {
+  display: block;
+  font-weight: 600;
+  margin: 12px 0 8px;
+}
+
+.merge-modal input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.merge-hit {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   header h1 {

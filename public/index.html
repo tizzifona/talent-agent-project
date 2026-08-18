@@ -174,7 +174,7 @@
         <section class="view" id="view-review">
           <section class="card">
             <h2>Manual review queue</h2>
-            <p class="upload-hint">Rows that were not auto-merged. Confirm these in the next phase; v2 shows the queue from memory.</p>
+            <p class="upload-hint">Confirm keeps the person. Reject holds them out. Merge folds them into another person. Decisions are saved and survive a later re-import.</p>
             <div id="review-queue"></div>
           </section>
           <section class="card" id="internal-section" style="display: none;">
@@ -209,6 +209,22 @@
         </div>
       </div>
 
+      <div id="merge-modal" class="modal-overlay">
+        <div class="modal-content merge-modal">
+          <div class="modal-header">
+            <h3>Merge person</h3>
+            <button id="merge-modal-close" class="modal-close">✕</button>
+          </div>
+          <div class="modal-body">
+            <p class="upload-hint" id="merge-source-label"></p>
+            <div id="merge-suggested"></div>
+            <label for="merge-search">Find a person to merge into</label>
+            <input id="merge-search" type="text" placeholder="Name, email, or phone">
+            <div id="merge-results"></div>
+          </div>
+        </div>
+      </div>
+
       <footer>
         <p>Powered by <strong>Blue Hope</strong> • Running on daemon: <strong id="daemon-party">...</strong></p>
       </footer>
@@ -239,6 +255,7 @@
           this.matchingResults = null;
           this.dashboard = { hasData: false, run: null, stats: null };
           this.people = { records: [], count: 0, offset: 0 };
+          this.mergeSourceId = '';
           this.MAX_FILES = 10;
         }
 
@@ -327,12 +344,47 @@
             this.people.offset += PAGE_SIZE;
             this.loadPeople();
           });
+          document.getElementById('merge-modal-close').addEventListener('click', () => this.closeMergeModal());
+          document.getElementById('merge-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'merge-modal') this.closeMergeModal();
+          });
+          document.getElementById('merge-search').addEventListener('input', () => this.loadMergeTargets());
           const openPerson = (event) => {
-            const link = event.target.closest('[data-person-id]');
+            if (event.target.closest('[data-review-action]')) return;
+            const link = event.target.closest('.person-link');
             if (link) this.showPerson(link.dataset.personId);
           };
           document.getElementById('people-body').addEventListener('click', openPerson);
-          document.getElementById('review-queue').addEventListener('click', openPerson);
+          document.getElementById('review-queue').addEventListener('click', (event) => {
+            const actionBtn = event.target.closest('[data-review-action]');
+            if (actionBtn) {
+              this.handleReviewAction(
+                actionBtn.dataset.personId,
+                actionBtn.dataset.reviewAction,
+                actionBtn.dataset.targetId,
+              );
+              return;
+            }
+            openPerson(event);
+          });
+          document.getElementById('merge-results').addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-review-action="merge"]');
+            if (btn) this.handleReviewAction(this.mergeSourceId, 'merge', btn.dataset.targetId);
+          });
+          document.getElementById('report-content').addEventListener('click', (event) => {
+            const actionBtn = event.target.closest('[data-review-action]');
+            if (actionBtn) {
+              this.handleReviewAction(
+                actionBtn.dataset.personId,
+                actionBtn.dataset.reviewAction,
+                actionBtn.dataset.targetId,
+              );
+            }
+          });
+          document.getElementById('merge-suggested').addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-review-action="merge"]');
+            if (btn) this.handleReviewAction(this.mergeSourceId, 'merge', btn.dataset.targetId);
+          });
         }
 
         switchView(name) {
@@ -403,6 +455,20 @@
           }
         }
 
+        reviewActions(person) {
+          if (!person.needs_review) return '';
+          const suggested = person.suggested_merge_id
+            ? ` data-target-id="${escapeHtml(person.suggested_merge_id)}"`
+            : '';
+          return `
+            <div class="row-actions">
+              <button class="action-btn" data-review-action="confirm" data-person-id="${escapeHtml(person.id)}">Confirm</button>
+              <button class="action-btn danger" data-review-action="reject" data-person-id="${escapeHtml(person.id)}">Reject</button>
+              <button class="action-btn" data-review-action="open-merge" data-person-id="${escapeHtml(person.id)}"${suggested}>Merge</button>
+            </div>
+          `;
+        }
+
         renderPeopleRows(records, bodyId, includeReviewReason = false) {
           const body = document.getElementById(bodyId);
           body.innerHTML = records.map((person) => {
@@ -412,7 +478,7 @@
               ? `<span class="match-badge manual-review" title="${escapeHtml(person.review_reason || '')}">Review</span>`
               : '';
             const extra = includeReviewReason
-              ? `<td>${escapeHtml(person.review_reason || '')}</td>`
+              ? `<td>${escapeHtml(person.review_reason || '')}</td><td>${this.reviewActions(person)}</td>`
               : '';
             return `
               <tr class="${person.needs_review ? 'needs-review-row' : ''}">
@@ -476,7 +542,7 @@
                   <thead>
                     <tr>
                       <th>Name</th><th>Email</th><th>Phone</th><th>Country</th>
-                      <th>Skills</th><th>Match</th><th>Confidence</th><th>Review</th><th>Reason</th>
+                      <th>Skills</th><th>Match</th><th>Confidence</th><th>Review</th><th>Reason</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody id="review-body"></tbody>
@@ -549,6 +615,7 @@
             `).join('');
 
             document.getElementById('report-content').innerHTML = `
+              ${person.needs_review ? `<div class="row-actions modal-actions">${this.reviewActions(person)}</div>` : ''}
               <dl class="detail-grid">
                 <dt>Person ID</dt><dd><code>${escapeHtml(person.id)}</code></dd>
                 <dt>Email</dt><dd>${escapeHtml(person.email || '-')}</dd>
@@ -559,7 +626,9 @@
                 <dt>Employment</dt><dd>${escapeHtml(person.employment_status || 'unknown')}</dd>
                 <dt>Seniority</dt><dd>${escapeHtml(person.seniority || '-')}</dd>
                 <dt>Provenance</dt><dd>${escapeHtml(person.provenance_text || '-')}</dd>
-                <dt>Review</dt><dd>${person.needs_review ? escapeHtml(person.review_reason || 'Needs review') : 'Clean'}</dd>
+                <dt>Review</dt><dd>${person.needs_review ? escapeHtml(person.review_reason || 'Needs review') : escapeHtml(person.review_status || 'Clean')}</dd>
+                ${person.review_decided_by ? `<dt>Decided by</dt><dd>${escapeHtml(person.review_decided_by)} · ${escapeHtml(person.review_decided_at || '')}</dd>` : ''}
+                ${person.merged_into ? `<dt>Merged into</dt><dd><code>${escapeHtml(person.merged_into)}</code></dd>` : ''}
               </dl>
               <h3>Field provenance</h3>
               <table class="report-table">
@@ -580,6 +649,94 @@
 
         closeModal() {
           document.getElementById('report-modal').classList.remove('active');
+        }
+
+        closeMergeModal() {
+          document.getElementById('merge-modal').classList.remove('active');
+          this.mergeSourceId = '';
+          document.getElementById('merge-search').value = '';
+          document.getElementById('merge-results').innerHTML = '';
+          document.getElementById('merge-suggested').innerHTML = '';
+        }
+
+        mergeHitHtml(person, label) {
+          const name = person.full_name || [person.first_name, person.last_name].filter(Boolean).join(' ') || person.id;
+          return `
+            <div class="merge-hit">
+              <div>
+                <strong>${escapeHtml(name)}</strong>
+                <div class="upload-hint">${escapeHtml(person.email || '-')} · ${escapeHtml(person.country || '-')}</div>
+              </div>
+              <button class="action-btn" data-review-action="merge" data-target-id="${escapeHtml(person.id)}">${escapeHtml(label)}</button>
+            </div>
+          `;
+        }
+
+        async openMergeModal(personId, suggestedId = '') {
+          this.mergeSourceId = personId;
+          document.getElementById('merge-source-label').textContent = `Merge ${personId} into an existing person.`;
+          document.getElementById('merge-modal').classList.add('active');
+          document.getElementById('merge-suggested').innerHTML = '';
+          if (suggestedId) {
+            try {
+              const result = await this.agentPost('/persons/get', { id: suggestedId });
+              if (result.record) {
+                document.getElementById('merge-suggested').innerHTML =
+                  `<p class="upload-hint">Suggested match</p>${this.mergeHitHtml(result.record, 'Merge into suggested')}`;
+              }
+            } catch (error) {
+              console.error('Suggested merge load failed:', error);
+            }
+          }
+          await this.loadMergeTargets();
+        }
+
+        async loadMergeTargets() {
+          if (!this.mergeSourceId) return;
+          const search = document.getElementById('merge-search').value.trim();
+          try {
+            const result = await this.agentPost('/persons/merge-targets', {
+              id: this.mergeSourceId,
+              search,
+            });
+            const records = result.records || [];
+            document.getElementById('merge-results').innerHTML = records.length
+              ? records.map((person) => this.mergeHitHtml(person, 'Merge here')).join('')
+              : '<p class="upload-hint">No matching people.</p>';
+          } catch (error) {
+            document.getElementById('merge-results').innerHTML =
+              `<p class="upload-hint">${escapeHtml(error.message)}</p>`;
+          }
+        }
+
+        async handleReviewAction(personId, action, targetId = '') {
+          if (!personId || !action) return;
+          try {
+            if (action === 'open-merge') {
+              await this.openMergeModal(personId, targetId);
+              return;
+            }
+            if (action === 'confirm' && !confirm('Keep this person in the working table?')) return;
+            if (action === 'reject' && !confirm('Hold this person out of the working table?')) return;
+            if (action === 'merge') {
+              if (!targetId) {
+                alert('Choose a person to merge into.');
+                return;
+              }
+              if (!confirm('Merge this person into the selected record? This cannot be undone from the queue.')) return;
+            }
+            await this.agentPost('/persons/review', { id: personId, action, targetId });
+            this.closeMergeModal();
+            this.closeModal();
+            await this.refreshDashboard();
+            await this.loadPeople();
+            if (document.getElementById('view-review').classList.contains('active')) {
+              await this.loadReview();
+            }
+            this.addChatMessage('assistant', `Review ${action} saved for ${personId}.`);
+          } catch (error) {
+            this.showError(`Review failed: ${error.message}`);
+          }
         }
 
         async handleFileSelect(event) {

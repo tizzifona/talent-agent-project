@@ -1,5 +1,6 @@
 import { GenerativeChatAgent } from '$static/lib/ts/GenerativeChatAgent.ts';
 import { response } from '$static/lib/ts/Responses.ts';
+import { Token } from '$static/lib/js/Token.js';
 import { runMatching } from './matcher.ts';
 import { normalizeRecord } from './normalize.ts';
 import { memoryAvailable } from './memory.ts';
@@ -11,11 +12,18 @@ import {
   queryInternal,
   queryPersons,
 } from './person-store.ts';
+import {
+  confirmPerson,
+  mergePersons,
+  rejectPerson,
+  searchMergeTargets,
+} from './review.ts';
 
 const systemPrompt = `You are a talent-data assistant for Blue Hope.
 Help users work with the unified person graph after identity resolution.
 You can explain match confidence, provenance, review reasons, and data quality.
 The canonical table lives in structured memory (bh-talent-persons) and survives refresh.
+Reviewers can confirm, reject, or merge queued rows; those decisions are audited.
 Do not invent employment status. Empty employment_status is a verification segment, not a guess.`;
 
 const agent = new GenerativeChatAgent({
@@ -28,6 +36,37 @@ const agent = new GenerativeChatAgent({
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
+}
+
+function actorFrom(request: Request): string {
+  const token = Token.from(request);
+  if (!token) return 'unknown';
+  try {
+    return token.getCounterparty() || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+async function handleReview(request: Request): Promise<Response> {
+  const body = await request.json();
+  const id = String(body?.id || '');
+  const action = String(body?.action || '');
+  const note = String(body?.note || '');
+  const actor = actorFrom(request);
+  if (!id) return response({ error: 'Person id required' });
+
+  if (action === 'confirm') {
+    return response({ ok: { person: await confirmPerson(id, actor, note) } });
+  }
+  if (action === 'reject') {
+    return response({ ok: { person: await rejectPerson(id, actor, note) } });
+  }
+  if (action === 'merge') {
+    const targetId = String(body?.targetId || '');
+    return response({ ok: await mergePersons(id, targetId, actor, note) });
+  }
+  return response({ error: 'Unknown review action' });
 }
 
 async function handleRunMatching(request: Request): Promise<Response> {
@@ -135,6 +174,18 @@ Deno.serve({ port: 0 }, async (request) => {
     if (url.pathname.endsWith('/internal/list') && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       return response({ ok: { records: await queryInternal(body?.runId) } });
+    }
+
+    if (url.pathname.endsWith('/persons/review') && request.method === 'POST') {
+      return await handleReview(request);
+    }
+
+    if (url.pathname.endsWith('/persons/merge-targets') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'Person id required' });
+      return response({
+        ok: { records: await searchMergeTargets(String(body.id), String(body.search || '')) },
+      });
     }
   } catch (error) {
     console.error('Agent route error:', error);

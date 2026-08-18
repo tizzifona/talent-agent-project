@@ -7,7 +7,7 @@ import {
   structuredWrite,
 } from './memory.ts';
 
-type JsonMap = Record<string, unknown>;
+export type JsonMap = Record<string, unknown>;
 
 interface SourceRecord {
   sourceDb?: string;
@@ -101,6 +101,9 @@ const LIST_SELECT = [
   'record_count',
   'employment_status',
   'seniority',
+  'review_status',
+  'suggested_merge_id',
+  'merged_into',
 ];
 
 function joinTags(values: string[]): string {
@@ -194,6 +197,10 @@ function personObject(person: MatchedPerson, runId: string): JsonMap {
       person.id,
     ]),
     run_id: runId,
+    review_status: 'pending',
+    suggested_merge_id: '',
+    merged_into: '',
+    merged_from: '',
   };
 }
 
@@ -215,6 +222,70 @@ function unwrapObject(record: JsonMap): JsonMap {
   return { id: record.id, ...object };
 }
 
+function suggestedMergeMatcherId(reason?: string): string {
+  if (!reason) return '';
+  const match = reason.match(/match to ([^\s(]+)/i);
+  return match?.[1] || '';
+}
+
+async function loadExistingDecisions(): Promise<Map<string, JsonMap>> {
+  const decisions = new Map<string, JsonMap>();
+  try {
+    const result = await structuredQuery(COLLECTIONS.persons, {
+      type: TYPES.person,
+      select: [
+        'id',
+        'review_status',
+        'review_decided_by',
+        'review_decided_at',
+        'review_note',
+        'merged_into',
+        'merged_from',
+      ],
+    });
+    for (const record of result.records) {
+      const row = unwrapObject(record);
+      const status = String(row.review_status || '');
+      if (status && status !== 'pending' && row.id) {
+        decisions.set(String(row.id), row);
+      }
+    }
+  } catch {
+    // Collection may not exist yet on the first run.
+  }
+  return decisions;
+}
+
+function applyPreservedDecision(object: JsonMap, existing: JsonMap | undefined): JsonMap {
+  if (!existing) return object;
+  const status = String(existing.review_status || '');
+  if (status === 'confirmed') {
+    return {
+      ...object,
+      needs_review: false,
+      held_out: false,
+      review_status: 'confirmed',
+      review_decided_by: existing.review_decided_by || '',
+      review_decided_at: existing.review_decided_at || '',
+      review_note: existing.review_note || '',
+      merged_from: existing.merged_from || '',
+    };
+  }
+  if (status === 'rejected' || status === 'merged') {
+    return {
+      ...object,
+      needs_review: false,
+      held_out: true,
+      review_status: status,
+      review_decided_by: existing.review_decided_by || '',
+      review_decided_at: existing.review_decided_at || '',
+      review_note: existing.review_note || '',
+      merged_into: existing.merged_into || '',
+    };
+  }
+  return object;
+}
+
 export async function persistMatchingResults(
   results: MatchingResults,
   sourceFiles: string[] = [],
@@ -226,11 +297,23 @@ export async function persistMatchingResults(
     ...(results.persons || []),
     ...(results.heldOutPersons || []),
   ];
-  const personRecords = people.map((person) => ({
-    id: stablePersonId(person),
-    object: personObject(person, runId),
-    metadata: { match_type: person.matchType || '', run_id: runId },
-  }));
+  const matcherToStable = new Map<string, string>();
+  for (const person of people) {
+    matcherToStable.set(person.id, stablePersonId(person));
+  }
+  const preserved = await loadExistingDecisions();
+
+  const personRecords = people.map((person) => {
+    const id = stablePersonId(person);
+    const object = personObject(person, runId);
+    const matcherTarget = suggestedMergeMatcherId(person.reviewReason);
+    object.suggested_merge_id = matcherTarget ? (matcherToStable.get(matcherTarget) || '') : '';
+    return {
+      id,
+      object: applyPreservedDecision(object, preserved.get(id)),
+      metadata: { match_type: person.matchType || '', run_id: runId },
+    };
+  });
 
   const internalRecords = (results.internalAccounts || []).map((account, index) => {
     const email = (account.email || '').trim().toLowerCase();

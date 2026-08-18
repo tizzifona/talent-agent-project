@@ -5,12 +5,14 @@ export const COLLECTIONS = {
   persons: 'bh-talent-persons',
   internal: 'bh-talent-internal',
   runs: 'bh-talent-runs',
+  reviewActions: 'bh-talent-review-actions',
 } as const;
 
 export const TYPES = {
   person: 'person',
   internal: 'internal',
   run: 'run',
+  reviewAction: 'review-action',
 } as const;
 
 export const LATEST_RUN_ID = 'latest';
