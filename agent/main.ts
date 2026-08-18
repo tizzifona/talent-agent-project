@@ -18,6 +18,12 @@ import {
   rejectPerson,
   searchMergeTargets,
 } from './review.ts';
+import {
+  deleteTable,
+  getTable,
+  listTables,
+  renameTable,
+} from './table-store.ts';
 
 const systemPrompt = `You are a talent-data assistant for Blue Hope.
 Help users work with the unified person graph after identity resolution.
@@ -95,11 +101,21 @@ async function handleRunMatching(request: Request): Promise<Response> {
   const matchingResults = runMatching(filesData, body.settings || { fuzzyThreshold: 85 });
   const sourceFiles = body.files.map((file: { name: string }) => file.name);
 
-  let persist: { runId: string; personsWritten: number; internalWritten: number } | null = null;
+  let persist: {
+    runId: string;
+    tableId: string;
+    tableName: string;
+    personsWritten: number;
+    internalWritten: number;
+  } | null = null;
   let persistError = '';
   if (memoryAvailable()) {
     try {
-      persist = await persistMatchingResults(matchingResults, sourceFiles);
+      persist = await persistMatchingResults(
+        matchingResults,
+        sourceFiles,
+        String(body.tableName || ''),
+      );
     } catch (error) {
       persistError = errorMessage(error);
       console.error('Persist to structured memory failed:', error);
@@ -110,6 +126,8 @@ async function handleRunMatching(request: Request): Promise<Response> {
     persisted: !!persist,
     persistError: persistError || undefined,
     runId: persist?.runId,
+    tableId: persist?.tableId,
+    tableName: persist?.tableName,
     personsWritten: persist?.personsWritten || 0,
     internalWritten: persist?.internalWritten || 0,
     totalRecords: matchingResults.totalRecords,
@@ -153,7 +171,8 @@ Deno.serve({ port: 0 }, async (request) => {
       if (!memoryAvailable()) {
         return response({ ok: { hasData: false, run: null, stats: null } });
       }
-      return response({ ok: await loadDashboardState() });
+      const body = await request.json().catch(() => ({}));
+      return response({ ok: await loadDashboardState(body?.runId) });
     }
 
     if (url.pathname.endsWith('/persons/query') && request.method === 'POST') {
@@ -168,7 +187,8 @@ Deno.serve({ port: 0 }, async (request) => {
     }
 
     if (url.pathname.endsWith('/persons/export') && request.method === 'POST') {
-      return response({ ok: { records: await exportPersonRows() } });
+      const body = await request.json().catch(() => ({}));
+      return response({ ok: { records: await exportPersonRows(body?.runId) } });
     }
 
     if (url.pathname.endsWith('/internal/list') && request.method === 'POST') {
@@ -186,6 +206,29 @@ Deno.serve({ port: 0 }, async (request) => {
       return response({
         ok: { records: await searchMergeTargets(String(body.id), String(body.search || '')) },
       });
+    }
+
+    if (url.pathname.endsWith('/tables/list') && request.method === 'POST') {
+      return response({ ok: { records: await listTables() } });
+    }
+
+    if (url.pathname.endsWith('/tables/get') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'Table id required' });
+      return response({ ok: { record: await getTable(String(body.id)) } });
+    }
+
+    if (url.pathname.endsWith('/tables/rename') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'Table id required' });
+      return response({ ok: { record: await renameTable(String(body.id), String(body.name || '')) } });
+    }
+
+    if (url.pathname.endsWith('/tables/delete') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'Table id required' });
+      await deleteTable(String(body.id));
+      return response({ ok: { deleted: true } });
     }
   } catch (error) {
     console.error('Agent route error:', error);

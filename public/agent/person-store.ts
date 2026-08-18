@@ -6,6 +6,7 @@ import {
   structuredQuery,
   structuredWrite,
 } from './memory.ts';
+import { saveNamedTable } from './table-store.ts';
 
 export type JsonMap = Record<string, unknown>;
 
@@ -289,7 +290,14 @@ function applyPreservedDecision(object: JsonMap, existing: JsonMap | undefined):
 export async function persistMatchingResults(
   results: MatchingResults,
   sourceFiles: string[] = [],
-): Promise<{ runId: string; personsWritten: number; internalWritten: number }> {
+  tableName = '',
+): Promise<{
+  runId: string;
+  tableId: string;
+  tableName: string;
+  personsWritten: number;
+  internalWritten: number;
+}> {
   const runId = `run-${Date.now()}`;
   const processedAt = results.processedAt || new Date().toISOString();
 
@@ -357,8 +365,18 @@ export async function persistMatchingResults(
     { id: LATEST_RUN_ID, object: runObject },
   ]);
 
+  const table = await saveNamedTable({
+    name: tableName || `Talent table ${processedAt.slice(0, 10)}`,
+    runId,
+    personCount: results.uniquePersons,
+    needsReviewCount: results.needsReviewCount || 0,
+    sourceFiles,
+  });
+
   return {
     runId,
+    tableId: table.id,
+    tableName: table.name,
     personsWritten: personRecords.length,
     internalWritten: internalRecords.length,
   };
@@ -408,31 +426,33 @@ export async function countPersons(filter: JsonMap): Promise<number> {
   return result.count;
 }
 
-export async function loadDashboardState(): Promise<JsonMap> {
-  const run = await loadLatestRun();
-  if (!run) {
+export async function loadDashboardState(runId?: string): Promise<JsonMap> {
+  const run = runId
+    ? unwrapObject(await structuredGet(COLLECTIONS.runs, runId) || {})
+    : await loadLatestRun();
+  if (!run || !run.run_id) {
     return { hasData: false, run: null, stats: null };
   }
-  const runId = String(run.run_id || '');
+  const activeRunId = String(run.run_id || runId || '');
   const [people, review, heldOut, internal] = await Promise.all([
     structuredQuery(COLLECTIONS.persons, {
       type: TYPES.person,
-      filter: { run_id: runId, held_out: false },
+      filter: { run_id: activeRunId, held_out: false },
       select: [],
     }),
     structuredQuery(COLLECTIONS.persons, {
       type: TYPES.person,
-      filter: { run_id: runId, needs_review: true },
+      filter: { run_id: activeRunId, needs_review: true },
       select: [],
     }),
     structuredQuery(COLLECTIONS.persons, {
       type: TYPES.person,
-      filter: { run_id: runId, held_out: true },
+      filter: { run_id: activeRunId, held_out: true },
       select: [],
     }),
     structuredQuery(COLLECTIONS.internal, {
       type: TYPES.internal,
-      filter: { run_id: runId },
+      filter: { run_id: activeRunId },
       select: [],
     }),
   ]);
@@ -455,13 +475,13 @@ export async function loadDashboardState(): Promise<JsonMap> {
   };
 }
 
-export async function exportPersonRows(): Promise<JsonMap[]> {
-  const run = await loadLatestRun();
-  const runId = run && typeof run.run_id === 'string' ? run.run_id : '';
-  if (!runId) return [];
+export async function exportPersonRows(runId?: string): Promise<JsonMap[]> {
+  const run = runId ? { run_id: runId } : await loadLatestRun();
+  const id = runId || (run && typeof run.run_id === 'string' ? run.run_id : '');
+  if (!id) return [];
   const result = await structuredQuery(COLLECTIONS.persons, {
     type: TYPES.person,
-    filter: { run_id: runId, held_out: false },
+    filter: { run_id: id, held_out: false },
     select: ['*'],
     order: 'created-desc',
   });

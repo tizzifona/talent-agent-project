@@ -14,152 +14,91 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
-    <div id="app">
-      <header>
-        <h1>Talent Agent</h1>
-        <p class="subtitle">Unified talent table after identity resolution</p>
+    <div id="app" class="shell">
+      <header class="topbar">
+        <button id="home-btn" class="brand">Talent Agent</button>
+        <p id="crumb" class="crumb">Welcome</p>
         <div id="connection-status" class="status-badge">Connecting...</div>
       </header>
 
-      <nav class="app-nav" id="app-nav">
-        <button data-view="people" class="active">People</button>
-        <button data-view="import">Import</button>
-        <button data-view="review">Review</button>
-        <button data-view="chat">Assistant</button>
-      </nav>
+      <div class="layout">
+      <main id="stage">
+        <section class="view active" id="view-welcome">
+          <p class="page-kicker">Blue Hope talent database</p>
+          <h1>Clean the list. Then work with it.</h1>
+          <p class="lede">This app takes overlapping talent files, builds one person per contact, and keeps that table ready for review, export, or outreach. The assistant on the right stays with you on every step.</p>
+          <div class="intro-list">
+            <div class="intro-item">
+              <strong>1. Import and deduplicate</strong>
+              <span>Upload CSV or Excel sources. Matching uses email, then phone, then a cautious name check. Uncertain rows go to review instead of being guessed.</span>
+            </div>
+            <div class="intro-item">
+              <strong>2. Keep a working table</strong>
+              <span>Each successful run is saved. You can preview people, rename the table, export CSV or Excel, or remove it from the library.</span>
+            </div>
+            <div class="intro-item">
+              <strong>3. Prepare outreach later</strong>
+              <span>When a table is ready, mailing settings let you choose who would be contacted. Sending still belongs to the re-engagement step; this page only prepares the segment.</span>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button id="welcome-start-btn" class="primary-btn">Choose a stage</button>
+          </div>
+        </section>
 
-      <main>
-        <section class="view active" id="view-people">
-          <section class="card" id="stats-section">
-            <h2>Overview</h2>
-            <p class="upload-hint" id="run-meta">No saved table yet. Import files to build the person graph.</p>
-            <div class="metrics-grid">
-              <div class="metric-card">
-                <div class="metric-value" id="total-records">0</div>
-                <div class="metric-label">Total Records</div>
-              </div>
-              <div class="metric-card">
-                <div class="metric-value" id="unique-persons">0</div>
-                <div class="metric-label">Unique Persons</div>
-              </div>
-              <div class="metric-card email-match">
-                <div class="metric-value" id="email-matches">0</div>
-                <div class="metric-label">Email Matches</div>
-              </div>
-              <div class="metric-card phone-match">
-                <div class="metric-value" id="phone-matches">0</div>
-                <div class="metric-label">Phone Matches</div>
-              </div>
-              <div class="metric-card fuzzy-match">
-                <div class="metric-value" id="fuzzy-matches">0</div>
-                <div class="metric-label">Fuzzy Name Matches</div>
-              </div>
-              <div class="metric-card manual-review">
-                <div class="metric-value" id="manual-review">0</div>
-                <div class="metric-label">Needs Manual Review</div>
-              </div>
-              <div class="metric-card held-out">
-                <div class="metric-value" id="held-out">0</div>
-                <div class="metric-label">Held Out</div>
-              </div>
-              <div class="metric-card internal-accounts">
-                <div class="metric-value" id="internal-accounts">0</div>
-                <div class="metric-label">Internal/Staff</div>
-              </div>
-            </div>
-            <div class="export-buttons">
-              <button id="export-csv-btn" class="secondary-btn">Export Unique Persons (CSV)</button>
-              <button id="export-xlsx-btn" class="secondary-btn">Export Full Workbook (Excel)</button>
-            </div>
-          </section>
-
-          <section class="card">
-            <h2>People</h2>
-            <div class="filters-bar">
-              <div>
-                <label for="people-search">Search</label>
-                <input id="people-search" type="text" placeholder="Name, email, phone, skills">
-              </div>
-              <div>
-                <label for="people-country">Country</label>
-                <input id="people-country" type="text" placeholder="Contains">
-              </div>
-              <div>
-                <label for="people-confidence">Confidence</label>
-                <select id="people-confidence">
-                  <option value="">All</option>
-                  <option value="high">high</option>
-                  <option value="medium">medium</option>
-                  <option value="medium-auto">medium-auto</option>
-                  <option value="low">low</option>
-                </select>
-              </div>
-              <div>
-                <label for="people-review">Review</label>
-                <select id="people-review">
-                  <option value="">All</option>
-                  <option value="yes">Needs review</option>
-                  <option value="no">Clean</option>
-                </select>
-              </div>
-              <div class="filter-actions">
-                <button id="people-apply-btn" class="primary-btn">Apply</button>
-                <button id="people-reset-btn" class="secondary-btn">Reset</button>
-              </div>
-            </div>
-            <div class="people-meta">
-              <span id="people-count">0 people</span>
-              <span id="people-page-label"></span>
-            </div>
-            <div id="people-empty" class="empty-state">No people in structured memory yet.</div>
-            <div id="people-table-wrap" style="display: none; overflow-x: auto;">
-              <table class="report-table" id="people-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Phone</th>
-                    <th>Country</th>
-                    <th>Skills</th>
-                    <th>Match</th>
-                    <th>Confidence</th>
-                    <th>Review</th>
-                  </tr>
-                </thead>
-                <tbody id="people-body"></tbody>
-              </table>
-            </div>
-            <div class="pagination">
-              <button id="people-prev-btn" class="secondary-btn" disabled>Previous</button>
-              <button id="people-next-btn" class="secondary-btn" disabled>Next</button>
-            </div>
-          </section>
+        <section class="view" id="view-hub">
+          <p class="page-kicker">Stage</p>
+          <h1>What do you want to do now?</h1>
+          <p class="lede">Pick one path. You can come back here from the title at any time.</p>
+          <div class="choice-grid">
+            <button class="choice-card" data-view="import">
+              <h2>Upload and deduplicate</h2>
+              <p>Add new source files and build a unified person table.</p>
+              <p class="when">Use this when you have CSV or Excel exports that still need identity resolution.</p>
+            </button>
+            <button class="choice-card" data-view="tables">
+              <h2>Saved tables</h2>
+              <p>Preview, rename, upload another run, or delete a finished table.</p>
+              <p class="when">Use this when matching already ran and you want to work with the result.</p>
+            </button>
+            <button class="choice-card" data-view="mailing">
+              <h2>Mailing from a table</h2>
+              <p>Choose a saved table and a segment for outreach. Nothing is sent from this screen yet.</p>
+              <p class="when">Use this after review, when the list is clean enough to message.</p>
+            </button>
+          </div>
         </section>
 
         <section class="view" id="view-import">
+          <p class="page-kicker">Step 1</p>
+          <h1>Upload and deduplicate</h1>
+          <p class="lede">Select up to 10 CSV or Excel files. After matching you can export the table or continue toward mailing.</p>
           <section class="card" id="upload-section">
-            <h2>Upload files (up to 10)</h2>
+            <h2>Source files</h2>
             <div class="upload-area">
               <input type="file" id="file-input" accept=".csv,.xlsx,.xls" multiple style="display: none;">
-              <button id="select-files-btn" class="primary-btn">Select Files</button>
-              <p class="upload-hint">CSV or Excel. Matching writes the unified table to structured memory.</p>
+              <button id="select-files-btn" class="primary-btn">Select files</button>
+              <p class="upload-hint">CSV or Excel. Matching saves a named table you can reopen later.</p>
             </div>
             <div id="files-list" class="files-container" style="display: none;">
-              <h3>Uploaded Files:</h3>
+              <h3>Selected files</h3>
               <div id="uploaded-files"></div>
-              <button id="clear-files-btn" class="secondary-btn">Clear All</button>
+              <button id="clear-files-btn" class="secondary-btn">Clear all</button>
             </div>
           </section>
-
           <section class="card" id="process-section" style="display: none;">
             <h2>Matching options</h2>
             <div class="settings-grid">
               <div class="setting-item">
-                <label>Fuzzy Name Threshold (%)</label>
+                <label for="table-name-input">Table name</label>
+                <input type="text" id="table-name-input" placeholder="Talent table">
+              </div>
+              <div class="setting-item">
+                <label>Fuzzy name threshold (%)</label>
                 <input type="number" id="fuzzy-threshold" value="85" min="50" max="100">
               </div>
               <div class="setting-item">
-                <label>Auto-merge Confidence</label>
+                <label>Auto-merge confidence</label>
                 <select id="auto-merge">
                   <option value="high" selected>High confidence only</option>
                   <option value="medium">Medium and above</option>
@@ -167,35 +106,183 @@
                 </select>
               </div>
             </div>
-            <button id="run-matching-btn" class="primary-btn">Run Deduplication</button>
+            <button id="run-matching-btn" class="primary-btn">Run deduplication</button>
           </section>
         </section>
 
-        <section class="view" id="view-review">
+        <section class="view" id="view-next">
+          <p class="page-kicker">Step 2</p>
+          <h1>The table is ready</h1>
+          <p class="lede" id="next-lede">Choose whether to save an export or keep working with this table.</p>
           <section class="card">
-            <h2>Manual review queue</h2>
-            <p class="upload-hint">Confirm keeps the person. Reject holds them out. Merge folds them into another person. Decisions are saved and survive a later re-import.</p>
-            <div id="review-queue"></div>
+            <h2 id="next-table-name">Saved table</h2>
+            <p class="upload-hint" id="run-meta"></p>
+            <div class="metrics-grid">
+              <div class="metric-card"><div class="metric-value" id="total-records">0</div><div class="metric-label">Source rows</div></div>
+              <div class="metric-card"><div class="metric-value" id="unique-persons">0</div><div class="metric-label">Unique people</div></div>
+              <div class="metric-card"><div class="metric-value" id="email-matches">0</div><div class="metric-label">Email matches</div></div>
+              <div class="metric-card"><div class="metric-value" id="phone-matches">0</div><div class="metric-label">Phone matches</div></div>
+              <div class="metric-card"><div class="metric-value" id="fuzzy-matches">0</div><div class="metric-label">Fuzzy matches</div></div>
+              <div class="metric-card"><div class="metric-value" id="manual-review">0</div><div class="metric-label">Needs review</div></div>
+              <div class="metric-card"><div class="metric-value" id="held-out">0</div><div class="metric-label">Held out</div></div>
+              <div class="metric-card"><div class="metric-value" id="internal-accounts">0</div><div class="metric-label">Internal</div></div>
+            </div>
           </section>
-          <section class="card" id="internal-section" style="display: none;">
-            <h2>Internal / staff accounts</h2>
-            <p class="upload-hint">Excluded from matching by email domain. Kept for audit.</p>
-            <div id="internal-list"></div>
-          </section>
+          <div class="choice-grid">
+            <button class="choice-card" id="next-export-csv">
+              <h2>Export CSV</h2>
+              <p>Download unique people as a single CSV file.</p>
+            </button>
+            <button class="choice-card" id="next-export-xlsx">
+              <h2>Export Excel</h2>
+              <p>Download a workbook of the unified table.</p>
+            </button>
+            <button class="choice-card" data-view="workspace">
+              <h2>Open the table</h2>
+              <p>Preview people and resolve the review queue before outreach.</p>
+            </button>
+            <button class="choice-card" data-view="mailing">
+              <h2>Set up mailing</h2>
+              <p>Choose a segment from this table. Sending is not enabled yet.</p>
+            </button>
+          </div>
         </section>
 
-        <section class="view" id="view-chat">
-          <section class="card" id="chat-section">
-            <h2>AI Assistant</h2>
-            <div id="chat-messages" class="chat-container"></div>
-            <div class="chat-input-container">
-              <input type="text" id="chat-input"
-                placeholder="Ask about people, matches, or data quality..." disabled>
-              <button id="send-chat-btn" disabled>Send</button>
+        <section class="view" id="view-tables">
+          <p class="page-kicker">Library</p>
+          <h1>Saved tables</h1>
+          <p class="lede">Preview a table, rename it, start a new upload, or remove it from the library.</p>
+          <div class="btn-row">
+            <button id="tables-upload-btn" class="primary-btn">Upload new files</button>
+          </div>
+          <div id="tables-empty" class="empty-state">No saved tables yet. Upload files to create the first one.</div>
+          <div id="tables-list"></div>
+        </section>
+
+        <section class="view" id="view-workspace">
+          <p class="page-kicker">Working table</p>
+          <h1 id="workspace-title">People</h1>
+          <p class="lede">Preview the unified contacts. Switch to Review for rows that still need a human decision.</p>
+          <div class="subnav" id="workspace-subnav">
+            <button data-panel="people" class="active">Preview</button>
+            <button data-panel="review">Review</button>
+          </div>
+          <div id="panel-people">
+            <section class="card">
+              <div class="filters-bar">
+                <div>
+                  <label for="people-search">Search</label>
+                  <input id="people-search" type="text" placeholder="Name, email, phone, skills">
+                </div>
+                <div>
+                  <label for="people-country">Country</label>
+                  <input id="people-country" type="text" placeholder="Contains">
+                </div>
+                <div>
+                  <label for="people-confidence">Confidence</label>
+                  <select id="people-confidence">
+                    <option value="">All</option>
+                    <option value="high">high</option>
+                    <option value="medium">medium</option>
+                    <option value="medium-auto">medium-auto</option>
+                    <option value="low">low</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="people-review">Review</label>
+                  <select id="people-review">
+                    <option value="">All</option>
+                    <option value="yes">Needs review</option>
+                    <option value="no">Clean</option>
+                  </select>
+                </div>
+                <div class="filter-actions">
+                  <button id="people-apply-btn" class="primary-btn">Apply</button>
+                  <button id="people-reset-btn" class="secondary-btn">Reset</button>
+                </div>
+              </div>
+              <div class="people-meta">
+                <span id="people-count">0 people</span>
+                <span id="people-page-label"></span>
+              </div>
+              <div id="people-empty" class="empty-state">No people in this table yet.</div>
+              <div id="people-table-wrap" style="display: none; overflow-x: auto;">
+                <table class="report-table" id="people-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th><th>Email</th><th>Phone</th><th>Country</th>
+                      <th>Skills</th><th>Match</th><th>Confidence</th><th>Review</th>
+                    </tr>
+                  </thead>
+                  <tbody id="people-body"></tbody>
+                </table>
+              </div>
+              <div class="pagination">
+                <button id="people-prev-btn" class="secondary-btn" disabled>Previous</button>
+                <button id="people-next-btn" class="secondary-btn" disabled>Next</button>
+              </div>
+              <div class="btn-row">
+                <button id="export-csv-btn" class="secondary-btn">Export CSV</button>
+                <button id="export-xlsx-btn" class="secondary-btn">Export Excel</button>
+                <button data-view="mailing" class="primary-btn">Continue to mailing</button>
+              </div>
+            </section>
+          </div>
+          <div id="panel-review" class="hidden">
+            <section class="card">
+              <h2>Manual review</h2>
+              <p class="upload-hint">Confirm keeps the person. Reject holds them out. Merge folds them into another person.</p>
+              <div id="review-queue"></div>
+            </section>
+            <section class="card" id="internal-section" style="display: none;">
+              <h2>Internal / staff accounts</h2>
+              <p class="upload-hint">Excluded from matching by email domain. Kept for audit.</p>
+              <div id="internal-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-mailing">
+          <p class="page-kicker">Outreach</p>
+          <h1>Mailing settings</h1>
+          <p class="lede">Choose who would receive the next campaign. The assistant can explain the segment. Actual sending is a later step.</p>
+          <section class="card">
+            <div class="settings-grid">
+              <div class="setting-item">
+                <label for="mailing-table">Table</label>
+                <select id="mailing-table"></select>
+              </div>
+              <div class="setting-item">
+                <label for="mailing-segment">Segment</label>
+                <select id="mailing-segment">
+                  <option value="all">All people in the working table</option>
+                  <option value="review">Still needs review</option>
+                  <option value="employment">Employment status unknown</option>
+                </select>
+              </div>
+            </div>
+            <p class="upload-hint" id="mailing-count">Select a table to see segment size.</p>
+            <div class="btn-row">
+              <button id="mailing-refresh-btn" class="secondary-btn">Refresh count</button>
+              <button id="mailing-open-table-btn" class="primary-btn">Open this table</button>
             </div>
           </section>
         </section>
       </main>
+
+      <aside class="agent-rail">
+        <div class="agent-head">
+          <h2>Assistant</h2>
+          <span class="agent-live">On</span>
+        </div>
+        <p class="agent-role">I stay on every step: import, tables, review, and mailing. Daemon: <strong id="daemon-party">...</strong></p>
+        <div id="chat-messages" class="chat-container"></div>
+        <div class="chat-input-container">
+          <input type="text" id="chat-input" placeholder="Ask about this step..." disabled>
+          <button id="send-chat-btn" disabled>Send</button>
+        </div>
+      </aside>
+      </div>
 
       <div id="report-modal" class="modal-overlay">
         <div class="modal-content">
@@ -224,10 +311,6 @@
           </div>
         </div>
       </div>
-
-      <footer>
-        <p>Powered by <strong>Blue Hope</strong> • Running on daemon: <strong id="daemon-party">...</strong></p>
-      </footer>
     </div>
 
     <script type="module">
@@ -235,6 +318,24 @@
         from 'https://webdaemon.online/latest/static/lib/dist/index.js';
 
       const PAGE_SIZE = 25;
+      const AGENT_GUIDES = {
+        welcome: 'This app builds one person per contact from overlapping talent files, then lets you review, export, or prepare mailing. I stay on the right for every step.',
+        hub: 'Pick one path. Import if you have new files. Saved tables if matching already ran. Mailing when a table is ready to message.',
+        import: 'Upload the source files first. I match by email, then phone, then a cautious name check. Uncertain rows go to review instead of being guessed.',
+        next: 'The unified table is saved. Export it, open it to review uncertain rows, or set up mailing from this list.',
+        tables: 'These are saved working tables. Preview opens the people list. Rename keeps the data. Delete hides the table from this library.',
+        workspace: 'This is the live table. Use Review for rows the matcher could not decide. Confirm, reject, or merge those before outreach.',
+        mailing: 'Nothing is sent from here yet. Choose a table and a segment so we know who would receive the next campaign.',
+      };
+      const CRUMBS = {
+        welcome: 'Welcome',
+        hub: 'Choose a stage',
+        import: 'Upload and deduplicate',
+        next: 'Table ready',
+        tables: 'Saved tables',
+        workspace: 'Working table',
+        mailing: 'Mailing settings',
+      };
 
       function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -256,6 +357,8 @@
           this.dashboard = { hasData: false, run: null, stats: null };
           this.people = { records: [], count: 0, offset: 0 };
           this.mergeSourceId = '';
+          this.currentTable = null;
+          this.currentView = 'welcome';
           this.MAX_FILES = 10;
         }
 
@@ -286,8 +389,9 @@
             document.getElementById('chat-input').disabled = false;
             document.getElementById('send-chat-btn').disabled = false;
             this.setupEventListeners();
-            this.addChatMessage('assistant', 'People load from structured memory. Import files if the table is empty.');
             await this.refreshDashboard();
+            const tables = await this.safeListTables();
+            this.switchView(tables.length ? 'hub' : 'welcome');
           } catch (error) {
             console.error('Initialization error:', error);
             this.showError(`Failed to initialize: ${error.message}`);
@@ -297,10 +401,28 @@
         }
 
         setupEventListeners() {
-          document.getElementById('app-nav').addEventListener('click', (event) => {
-            const button = event.target.closest('button[data-view]');
-            if (button) this.switchView(button.dataset.view);
+          document.getElementById('home-btn').addEventListener('click', () => this.switchView('hub'));
+          document.getElementById('welcome-start-btn').addEventListener('click', () => this.switchView('hub'));
+          document.getElementById('stage').addEventListener('click', (event) => {
+            const choice = event.target.closest('[data-view]');
+            if (choice) this.switchView(choice.dataset.view);
           });
+          document.getElementById('tables-upload-btn').addEventListener('click', () => this.switchView('import'));
+          document.getElementById('tables-list').addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-table-action]');
+            if (!btn) return;
+            this.handleTableAction(btn.dataset.tableId, btn.dataset.tableAction);
+          });
+          document.getElementById('workspace-subnav').addEventListener('click', (event) => {
+            const button = event.target.closest('button[data-panel]');
+            if (button) this.showWorkspacePanel(button.dataset.panel);
+          });
+          document.getElementById('next-export-csv').addEventListener('click', () => this.exportResults('csv'));
+          document.getElementById('next-export-xlsx').addEventListener('click', () => this.exportResults('xlsx'));
+          document.getElementById('mailing-refresh-btn').addEventListener('click', () => this.refreshMailingCount());
+          document.getElementById('mailing-open-table-btn').addEventListener('click', () => this.openSelectedMailingTable());
+          document.getElementById('mailing-table').addEventListener('change', () => this.refreshMailingCount());
+          document.getElementById('mailing-segment').addEventListener('change', () => this.refreshMailingCount());
 
           document.getElementById('select-files-btn').addEventListener('click', () => {
             document.getElementById('file-input').click();
@@ -388,14 +510,45 @@
         }
 
         switchView(name) {
-          document.querySelectorAll('.app-nav button').forEach((button) => {
-            button.classList.toggle('active', button.dataset.view === name);
-          });
+          this.currentView = name;
           document.querySelectorAll('.view').forEach((view) => {
             view.classList.toggle('active', view.id === `view-${name}`);
           });
-          if (name === 'review') this.loadReview();
-          if (name === 'people') this.loadPeople();
+          document.getElementById('crumb').textContent = CRUMBS[name] || name;
+          this.guideFor(name);
+          if (name === 'tables') this.loadTables();
+          if (name === 'workspace') {
+            this.showWorkspacePanel('people');
+            this.loadPeople();
+          }
+          if (name === 'mailing') this.loadMailing();
+        }
+
+        guideFor(name) {
+          const text = AGENT_GUIDES[name];
+          if (!text) return;
+          const last = document.querySelector('#chat-messages .chat-message.assistant:last-child');
+          if (last && last.textContent === text) return;
+          this.addChatMessage('assistant', text);
+        }
+
+        showWorkspacePanel(panel) {
+          document.querySelectorAll('#workspace-subnav button').forEach((button) => {
+            button.classList.toggle('active', button.dataset.panel === panel);
+          });
+          document.getElementById('panel-people').classList.toggle('hidden', panel !== 'people');
+          document.getElementById('panel-review').classList.toggle('hidden', panel !== 'review');
+          if (panel === 'review') this.loadReview();
+          if (panel === 'people') this.loadPeople();
+        }
+
+        async safeListTables() {
+          try {
+            const result = await this.agentPost('/tables/list');
+            return result.records || [];
+          } catch {
+            return [];
+          }
         }
 
         async agentPost(path, body = {}) {
@@ -416,6 +569,7 @@
         currentFilters() {
           const review = document.getElementById('people-review').value;
           return {
+            runId: this.currentTable?.run_id,
             search: document.getElementById('people-search').value.trim(),
             country: document.getElementById('people-country').value.trim(),
             matchConfidence: document.getElementById('people-confidence').value,
@@ -439,17 +593,21 @@
           const files = Array.isArray(stats.source_files) ? stats.source_files.join(', ') : '';
           const when = stats.processed_at ? new Date(stats.processed_at).toLocaleString() : '';
           document.getElementById('run-meta').textContent = when
-            ? `Last saved run ${when}${files ? ` · ${files}` : ''}`
-            : 'Saved person graph in structured memory.';
+            ? `Saved ${when}${files ? ` · ${files}` : ''}`
+            : 'Saved in structured memory.';
+          const title = this.currentTable?.name || 'Saved table';
+          const nextName = document.getElementById('next-table-name');
+          const workspaceTitle = document.getElementById('workspace-title');
+          if (nextName) nextName.textContent = title;
+          if (workspaceTitle) workspaceTitle.textContent = title;
         }
 
         async refreshDashboard() {
           try {
-            this.dashboard = await this.agentPost('/dashboard/state');
-            if (this.dashboard?.hasData) {
-              this.renderStats(this.dashboard.stats);
-              await this.loadPeople();
-            }
+            this.dashboard = await this.agentPost('/dashboard/state', {
+              runId: this.currentTable?.run_id,
+            });
+            if (this.dashboard?.hasData) this.renderStats(this.dashboard.stats);
           } catch (error) {
             console.error('Dashboard load failed:', error);
           }
@@ -528,6 +686,7 @@
         async loadReview() {
           try {
             const result = await this.agentPost('/persons/query', {
+              runId: this.currentTable?.run_id,
               needsReview: true,
               limit: 100,
               offset: 0,
@@ -551,7 +710,9 @@
               this.renderPeopleRows(records, 'review-body', true);
             }
 
-            const internal = await this.agentPost('/internal/list');
+            const internal = await this.agentPost('/internal/list', {
+              runId: this.currentTable?.run_id,
+            });
             const accounts = internal.records || [];
             const section = document.getElementById('internal-section');
             if (accounts.length === 0) {
@@ -730,7 +891,7 @@
             this.closeModal();
             await this.refreshDashboard();
             await this.loadPeople();
-            if (document.getElementById('view-review').classList.contains('active')) {
+            if (document.getElementById('panel-review') && !document.getElementById('panel-review').classList.contains('hidden')) {
               await this.loadReview();
             }
             this.addChatMessage('assistant', `Review ${action} saved for ${personId}.`);
@@ -888,18 +1049,27 @@
                 records: file.data,
               })),
               settings,
+              tableName: document.getElementById('table-name-input').value.trim(),
             });
             this.matchingResults = result;
-            btn.textContent = 'Matching complete';
-            const persisted = result.persisted
-              ? 'Saved to structured memory.'
-              : `Matching ran, but memory save failed${result.persistError ? `: ${result.persistError}` : ''}.`;
+            btn.textContent = 'Run deduplication';
+            btn.disabled = false;
+            if (result.tableId) {
+              this.currentTable = {
+                id: result.tableId,
+                name: result.tableName || 'Saved table',
+                run_id: result.runId,
+              };
+            }
+            const savedNote = result.persisted
+              ? `The table is saved${result.tableName ? ` as “${result.tableName}”` : ''}.`
+              : `Matching ran, but the table could not be saved${result.persistError ? `: ${result.persistError}` : ''}.`;
             this.addChatMessage(
               'assistant',
-              `Deduplication complete. ${result.uniquePersons} unique persons from ${result.totalRecords} records. ${persisted}`,
+              `Deduplication complete. ${result.uniquePersons} unique people from ${result.totalRecords} rows. ${savedNote}`,
             );
             await this.refreshDashboard();
-            this.switchView('people');
+            this.switchView('next');
           } catch (error) {
             this.showError(`Failed to run matching: ${error.message}`);
             btn.textContent = 'Run Deduplication';
@@ -933,7 +1103,9 @@
           try {
             let rows = [];
             try {
-              const exported = await this.agentPost('/persons/export');
+              const exported = await this.agentPost('/persons/export', {
+                runId: this.currentTable?.run_id,
+              });
               rows = (exported.records || []).map((person) => this.personToRow(person));
             } catch {
               rows = (this.matchingResults?.persons || []).map((person) => this.personToRow(person));
@@ -980,6 +1152,111 @@
             return '"' + str.replace(/"/g, '""') + '"';
           }
           return str;
+        }
+
+        async loadTables() {
+          const records = await this.safeListTables();
+          const empty = document.getElementById('tables-empty');
+          const list = document.getElementById('tables-list');
+          if (!records.length) {
+            empty.style.display = 'block';
+            list.innerHTML = '';
+            return;
+          }
+          empty.style.display = 'none';
+          list.innerHTML = records.map((table) => `
+            <div class="table-row">
+              <div class="table-meta">
+                <span class="table-name">${escapeHtml(table.name || 'Untitled')}</span>
+                <span class="table-sub">${escapeHtml(String(table.person_count || 0))} people · ${escapeHtml(table.created_at ? new Date(table.created_at).toLocaleString() : '')}</span>
+              </div>
+              <div class="table-actions">
+                <button class="action-btn" data-table-action="preview" data-table-id="${escapeHtml(table.id)}">Preview</button>
+                <button class="action-btn" data-table-action="rename" data-table-id="${escapeHtml(table.id)}">Rename</button>
+                <button class="action-btn" data-table-action="mailing" data-table-id="${escapeHtml(table.id)}">Mailing</button>
+                <button class="action-btn danger" data-table-action="delete" data-table-id="${escapeHtml(table.id)}">Delete</button>
+              </div>
+            </div>
+          `).join('');
+        }
+
+        async handleTableAction(id, action) {
+          if (!id || !action) return;
+          try {
+            if (action === 'preview' || action === 'mailing') {
+              const result = await this.agentPost('/tables/get', { id });
+              if (!result.record) throw new Error('Table not found');
+              this.currentTable = result.record;
+              await this.refreshDashboard();
+              this.switchView(action === 'preview' ? 'workspace' : 'mailing');
+              return;
+            }
+            if (action === 'rename') {
+              const next = prompt('New table name');
+              if (!next) return;
+              await this.agentPost('/tables/rename', { id, name: next });
+              await this.loadTables();
+              this.addChatMessage('assistant', `Table renamed to “${next}”.`);
+              return;
+            }
+            if (action === 'delete') {
+              if (!confirm('Remove this table from the library? People data stays in memory but will no longer appear here.')) return;
+              await this.agentPost('/tables/delete', { id });
+              if (this.currentTable?.id === id) this.currentTable = null;
+              await this.loadTables();
+            }
+          } catch (error) {
+            this.showError(`Table action failed: ${error.message}`);
+          }
+        }
+
+        async loadMailing() {
+          const records = await this.safeListTables();
+          const select = document.getElementById('mailing-table');
+          select.innerHTML = records.length
+            ? records.map((table) => `
+                <option value="${escapeHtml(table.id)}" ${this.currentTable?.id === table.id ? 'selected' : ''}>
+                  ${escapeHtml(table.name || table.id)}
+                </option>
+              `).join('')
+            : '<option value="">No saved tables</option>';
+          await this.refreshMailingCount();
+        }
+
+        async refreshMailingCount() {
+          const tableId = document.getElementById('mailing-table').value;
+          const segment = document.getElementById('mailing-segment').value;
+          const label = document.getElementById('mailing-count');
+          if (!tableId) {
+            label.textContent = 'Save a table first, then return here to choose a segment.';
+            return;
+          }
+          try {
+            const table = (await this.agentPost('/tables/get', { id: tableId })).record;
+            if (!table) throw new Error('Table not found');
+            this.currentTable = table;
+            const query = { runId: table.run_id, heldOut: false, limit: 1, offset: 0 };
+            if (segment === 'review') query.needsReview = true;
+            if (segment === 'employment') query.search = 'unknown';
+            const result = await this.agentPost('/persons/query', query);
+            const names = {
+              all: 'people in the working table',
+              review: 'people still needing review',
+              employment: 'rows matching unknown employment (approximate until that field is filled)',
+            };
+            label.textContent = `${result.count || 0} ${names[segment] || 'people'} in “${table.name}”. Sending is not enabled yet.`;
+          } catch (error) {
+            label.textContent = error.message;
+          }
+        }
+
+        async openSelectedMailingTable() {
+          const tableId = document.getElementById('mailing-table').value;
+          if (!tableId) {
+            this.switchView('tables');
+            return;
+          }
+          await this.handleTableAction(tableId, 'preview');
         }
 
         async sendChatMessage() {

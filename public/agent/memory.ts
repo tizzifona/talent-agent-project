@@ -6,6 +6,7 @@ export const COLLECTIONS = {
   internal: 'bh-talent-internal',
   runs: 'bh-talent-runs',
   reviewActions: 'bh-talent-review-actions',
+  tables: 'bh-talent-tables',
 } as const;
 
 export const TYPES = {
@@ -13,6 +14,7 @@ export const TYPES = {
   internal: 'internal',
   run: 'run',
   reviewAction: 'review-action',
+  table: 'table',
 } as const;
 
 export const LATEST_RUN_ID = 'latest';
