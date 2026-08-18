@@ -7,6 +7,7 @@ export const COLLECTIONS = {
   runs: 'bh-talent-runs',
   reviewActions: 'bh-talent-review-actions',
   tables: 'bh-talent-tables',
+  consents: 'bh-talent-consents',
 } as const;
 
 export const TYPES = {
@@ -15,6 +16,7 @@ export const TYPES = {
   run: 'run',
   reviewAction: 'review-action',
   table: 'table',
+  consent: 'consent',
 } as const;
 
 export const LATEST_RUN_ID = 'latest';

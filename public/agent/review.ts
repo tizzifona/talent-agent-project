@@ -1,5 +1,6 @@
 import { COLLECTIONS, TYPES, structuredQuery, structuredWrite } from './memory.ts';
 import { getPerson, queryPersons, type JsonMap } from './person-store.ts';
+import { CONSENT_FIELD_NAMES, UNIFIED_FIELD_NAMES } from './field-map.ts';
 
 export type ReviewAction = 'confirm' | 'reject' | 'merge';
 
@@ -25,11 +26,16 @@ function rebuildSearchText(person: JsonMap): string {
   return [
     person.full_name,
     person.first_name,
-    person.last_name,
-    person.email,
-    person.phone,
+    person.last_names,
+    person.primary_email,
+    person.phone_number,
     person.country,
+    person.city_of_residence,
+    person.languages,
+    person.technical_skills,
+    person.key_skills,
     person.skill_tags,
+    person.candidate_id,
     person.person_id,
     person.id,
   ].filter(Boolean).join(' ').toLowerCase();
@@ -126,20 +132,36 @@ function mergePersonObjects(target: JsonMap, incoming: JsonMap): JsonMap {
     }
   }
 
+  // Sections B-F: keep the target's value, fall back to the incoming one for blanks.
+  const unified: JsonMap = {};
+  for (const name of UNIFIED_FIELD_NAMES) {
+    if (CONSENT_FIELD_NAMES.includes(name)) continue;
+    unified[name] = pick(name);
+  }
+
   const merged: JsonMap = {
     ...asObject(target),
+    ...unified,
     first_name: pick('first_name'),
-    last_name: pick('last_name'),
+    last_names: pick('last_names'),
     full_name: pick('full_name'),
-    email: pick('email'),
-    phone: pick('phone'),
+    primary_email: pick('primary_email'),
+    phone_number: pick('phone_number'),
     country: pick('country'),
     employment_status: pick('employment_status'),
     seniority: pick('seniority'),
     readiness_score: pick('readiness_score'),
     skill_tags: joinTags([...splitTags(target.skill_tags), ...splitTags(incoming.skill_tags)]),
-    all_emails: joinTags([...splitTags(target.all_emails), ...splitTags(incoming.all_emails), String(incoming.email || '')]),
-    all_phones: joinTags([...splitTags(target.all_phones), ...splitTags(incoming.all_phones), String(incoming.phone || '')]),
+    all_emails: joinTags([
+      ...splitTags(target.all_emails),
+      ...splitTags(incoming.all_emails),
+      String(incoming.primary_email || ''),
+    ]),
+    all_phones: joinTags([
+      ...splitTags(target.all_phones),
+      ...splitTags(incoming.all_phones),
+      String(incoming.phone_number || ''),
+    ]),
     provenance_text: joinTags([
       ...splitTags(target.provenance_text),
       ...splitTags(incoming.provenance_text),

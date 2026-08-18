@@ -7,11 +7,18 @@ import {
   structuredWrite,
 } from './memory.ts';
 import { saveNamedTable } from './table-store.ts';
+import { saveConsents } from './consent-store.ts';
+import {
+  candidateIdFrom,
+  CONSENT_FIELD_NAMES,
+  UNIFIED_FIELD_NAMES,
+} from './field-map.ts';
 
 export type JsonMap = Record<string, unknown>;
 
 interface SourceRecord {
   sourceDb?: string;
+  sourceDatabase?: string;
   rowIndex?: number;
   email?: string;
   phone?: string;
@@ -35,6 +42,8 @@ interface MatchedPerson {
   primaryLastName?: string;
   country?: string;
   skills?: string[];
+  unified?: Record<string, string>;
+  sourceDatabases?: string[];
   matchType?: string;
   matchConfidence?: string;
   confidence?: number;
@@ -86,12 +95,21 @@ export interface PersonQuery {
 
 const LIST_SELECT = [
   'id',
+  'candidate_id',
+  'source_database',
   'full_name',
   'first_name',
-  'last_name',
-  'email',
-  'phone',
+  'last_names',
+  'primary_email',
+  'phone_number',
   'country',
+  'country_of_residence',
+  'city_of_residence',
+  'languages',
+  'english_level',
+  'technical_skills',
+  'key_skills',
+  'years_of_experience',
   'skill_tags',
   'match_type',
   'match_confidence',
@@ -143,7 +161,7 @@ function searchText(parts: Array<string | undefined>): string {
   return parts.filter(Boolean).join(' ').toLowerCase();
 }
 
-function personObject(person: MatchedPerson, runId: string): JsonMap {
+function personObject(person: MatchedPerson, runId: string, stableId: string): JsonMap {
   const records = person.records || [];
   const emails = new Set<string>();
   const phones = new Set<string>();
@@ -154,14 +172,28 @@ function personObject(person: MatchedPerson, runId: string): JsonMap {
     if (!readiness && record.readinessScore) readiness = record.readinessScore;
   }
 
+  // Sections B-F of the consolidation spec. Consents are excluded on purpose —
+  // they live in their own collection (section G).
+  const unified = person.unified || {};
+  const descriptive: JsonMap = {};
+  for (const name of UNIFIED_FIELD_NAMES) {
+    if (CONSENT_FIELD_NAMES.includes(name)) continue;
+    descriptive[name] = unified[name] || '';
+  }
+
   return {
+    candidate_id: candidateIdFrom(stableId),
+    source_database: joinTags(person.sourceDatabases || []),
     person_id: person.id,
     first_name: person.primaryFirstName || '',
-    last_name: person.primaryLastName || '',
+    last_names: person.primaryLastName || '',
     full_name: person.primaryName || '',
-    email: person.primaryEmail || '',
-    phone: person.primaryPhone || '',
+    primary_email: person.primaryEmail || '',
+    phone_number: person.primaryPhone || '',
+    // Derived, used by the country filter so a person is findable by either
+    // residence or origin.
     country: person.country || '',
+    ...descriptive,
     skill_tags: joinTags(person.skills || []),
     match_type: person.matchType || '',
     match_confidence: person.matchConfidence || '',
@@ -179,6 +211,7 @@ function personObject(person: MatchedPerson, runId: string): JsonMap {
     field_provenance: person.fieldProvenance || {},
     sources: records.map((record) => ({
       source_file: record.sourceDb || '',
+      source_database: record.sourceDatabase || '',
       source_row_id: String(record.rowIndex ?? ''),
       email: record.email || '',
       phone: record.phone || '',
@@ -194,7 +227,13 @@ function personObject(person: MatchedPerson, runId: string): JsonMap {
       person.primaryEmail,
       person.primaryPhone,
       person.country,
+      unified.city_of_residence,
+      unified.languages,
+      unified.technical_skills,
+      unified.key_skills,
+      unified.field_of_study,
       joinTags(person.skills || []),
+      candidateIdFrom(stableId),
       person.id,
     ]),
     run_id: runId,
@@ -297,6 +336,7 @@ export async function persistMatchingResults(
   tableName: string;
   personsWritten: number;
   internalWritten: number;
+  consentsWritten: number;
 }> {
   const runId = `run-${Date.now()}`;
   const processedAt = results.processedAt || new Date().toISOString();
@@ -313,7 +353,7 @@ export async function persistMatchingResults(
 
   const personRecords = people.map((person) => {
     const id = stablePersonId(person);
-    const object = personObject(person, runId);
+    const object = personObject(person, runId, id);
     const matcherTarget = suggestedMergeMatcherId(person.reviewReason);
     object.suggested_merge_id = matcherTarget ? (matcherToStable.get(matcherTarget) || '') : '';
     return {
@@ -360,6 +400,15 @@ export async function persistMatchingResults(
 
   await structuredWrite(COLLECTIONS.persons, TYPES.person, personRecords);
   await structuredWrite(COLLECTIONS.internal, TYPES.internal, internalRecords);
+  const consentsWritten = await saveConsents(people.map((person) => {
+    const personId = stablePersonId(person);
+    return {
+      candidateId: candidateIdFrom(personId),
+      personId,
+      runId,
+      values: person.unified || {},
+    };
+  }));
   await structuredWrite(COLLECTIONS.runs, TYPES.run, [
     { id: runId, object: runObject },
     { id: LATEST_RUN_ID, object: runObject },
@@ -379,6 +428,7 @@ export async function persistMatchingResults(
     tableName: table.name,
     personsWritten: personRecords.length,
     internalWritten: internalRecords.length,
+    consentsWritten,
   };
 }
 
