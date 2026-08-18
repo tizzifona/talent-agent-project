@@ -27,8 +27,8 @@ body {
   font-family: Manrope, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: var(--bg);
   color: var(--text);
-  font-size: 17px;
-  line-height: 1.55;
+  font-size: 19px;
+  line-height: 1.6;
 }
 
 .shell {
@@ -138,23 +138,23 @@ body {
 }
 
 .view h1 {
-  font-size: 2.5rem;
+  font-size: 2.9rem;
   font-weight: 800;
   letter-spacing: -0.04em;
-  line-height: 1.12;
-  margin-bottom: 12px;
+  line-height: 1.1;
+  margin-bottom: 14px;
 }
 
 .lede {
-  font-size: 1.15rem;
+  font-size: 1.25rem;
   color: var(--text-muted);
   max-width: 44rem;
-  margin-bottom: 32px;
+  margin-bottom: 34px;
 }
 
 .page-kicker {
   font-family: 'DM Mono', ui-monospace, monospace;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -204,7 +204,7 @@ body {
 .choice-card h2,
 .card h2,
 .intro-item strong {
-  font-size: 1.28rem;
+  font-size: 1.45rem;
   font-weight: 700;
   margin-bottom: 8px;
 }
@@ -213,12 +213,12 @@ body {
 .intro-item span,
 .upload-hint {
   color: var(--text-muted);
-  font-size: 1.02rem;
+  font-size: 1.08rem;
 }
 
 .choice-card .when {
   margin-top: 12px;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: color-mix(in srgb, var(--text-muted) 80%, var(--teal));
 }
 
@@ -554,7 +554,22 @@ body {
   margin-bottom: 10px;
   padding: 12px 14px;
   border-radius: 12px;
-  font-size: 0.98rem;
+  font-size: 1rem;
+  white-space: pre-line;
+}
+
+.chat-message.note {
+  background: transparent;
+  border: 1px dashed var(--line);
+  color: var(--text-muted);
+  font-family: 'DM Mono', ui-monospace, monospace;
+  font-size: 0.84rem;
+}
+
+.agent-tools {
+  display: flex;
+  gap: 8px;
+  padding: 0 20px 12px;
 }
 
 .chat-message.user {
