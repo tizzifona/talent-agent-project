@@ -2,6 +2,7 @@ import { GenerativeChatAgent } from '$static/lib/ts/GenerativeChatAgent.ts';
 import { response } from '$static/lib/ts/Responses.ts';
 import { Token } from '$static/lib/js/Token.js';
 import { runMatching } from './matcher.ts';
+import { enrichMatchingResults } from './enrich.ts';
 import { normalizeRecord } from './normalize.ts';
 import { memoryAvailable } from './memory.ts';
 import { listConsents } from './consent-store.ts';
@@ -106,7 +107,9 @@ async function handleRunMatching(request: Request): Promise<Response> {
     loadedAt: new Date().toISOString(),
   };
 
-  const matchingResults = runMatching(filesData, body.settings || { fuzzyThreshold: 85 });
+  const matchingResults = enrichMatchingResults(
+    runMatching(filesData, body.settings || { fuzzyThreshold: 85 }),
+  );
   const sourceFiles = body.files.map((file: { name: string }) => file.name);
 
   let persist: {

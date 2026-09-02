@@ -1,5 +1,7 @@
 import { UNIFIED_FIELD_NAMES } from './field-map.ts';
 
+type MatchConfidence = 'high' | 'medium' | 'medium-auto' | 'low' | 'none';
+
 interface DatabaseRecord {
   sourceDb: string;
   rowIndex: number;
@@ -35,9 +37,9 @@ interface DatabaseRecord {
   manualFlagReason?: string;
   ingestedAt?: string;
   original?: Record<string, string>;
+  /** Identity-confidence of the row that produced this record (set at merge time). */
+  rowMatchConfidence?: MatchConfidence;
 }
-
-type MatchConfidence = 'high' | 'medium' | 'medium-auto' | 'low' | 'none';
 
 interface FieldProvenance {
   value: string;
@@ -68,6 +70,13 @@ interface MatchedPerson {
   needsReview: boolean;
   reviewReason?: string;
   heldOut: boolean;
+  skillTags?: string;
+  seniority?: string;
+  enrichment?: Record<string, {
+    source: 'original_data' | 'ai_inferred';
+    confidence_tier: 'high' | 'medium' | 'low';
+    inference_basis: string;
+  }>;
 }
 
 interface MatchingSettings {
@@ -137,6 +146,21 @@ function parseDateMs(iso?: string): number | null {
   return Number.isNaN(ms) ? null : ms;
 }
 
+function confidenceRank(c?: MatchConfidence): number {
+  if (c === 'high') return 4;
+  if (c === 'medium') return 3;
+  if (c === 'medium-auto') return 2;
+  if (c === 'low') return 1;
+  return 0;
+}
+
+/** Talent ID / profile_id stay inside one originating source (BD1–BD7), not one file. */
+function originatingSourceKey(record: DatabaseRecord): string {
+  const type = record.sourceType;
+  if (type && type >= 1 && type <= 7) return `bd${type}`;
+  return `file:${record.sourceDb}`;
+}
+
 function datesProximate(a: DatabaseRecord, b: DatabaseRecord, windowDays: number): boolean {
   const aMs = parseDateMs(a.eventDate) ?? parseDateMs(a.applicationDate) ?? parseDateMs(a.lastModified);
   const bMs = parseDateMs(b.eventDate) ?? parseDateMs(b.applicationDate) ?? parseDateMs(b.lastModified);
@@ -204,6 +228,11 @@ function resolveField(
   });
 
   const winner = ranked[0];
+  const sameValue = nonEmpty.filter((x) => x.value === winner.value);
+  const bestStamp = sameValue.reduce<MatchConfidence>((best, x) => {
+    const stamp = x.record.rowMatchConfidence || matchConfidence;
+    return confidenceRank(stamp) > confidenceRank(best) ? stamp : best;
+  }, winner.record.rowMatchConfidence || matchConfidence);
   const overwritten = ranked.slice(1)
     .filter((x) => x.value !== winner.value)
     .map((x) => ({
@@ -217,7 +246,7 @@ function resolveField(
     source_file: winner.record.sourceDb,
     source_row_id: String(winner.record.rowIndex),
     ingested_at: winner.record.ingestedAt || new Date().toISOString(),
-    match_confidence: matchConfidence,
+    match_confidence: bestStamp,
     overwritten_values: overwritten,
   };
 }
@@ -317,7 +346,10 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
 
   // --- Spec Sec. 5: Exclusion before matching ---
   const internalRecords = allLoaded.filter((r) => r.isInternal);
-  const candidates = allLoaded.filter((r) => !r.isInternal);
+  const withPeople = allLoaded.filter((r) => !r.isInternal);
+  // Test/placeholder rows stay out of matching until a human confirms exclusion.
+  const testRecords = withPeople.filter((r) => r.isTestRow);
+  const candidates = withPeople.filter((r) => !r.isTestRow);
 
   const internalAccounts = internalRecords.map((r) => ({
     sourceDb: r.sourceDb,
@@ -432,8 +464,9 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
   const bySource = new Map<string, DatabaseRecord[]>();
   for (const record of seedable) {
     if (processed.has(recordKey(record))) continue;
-    if (!bySource.has(record.sourceDb)) bySource.set(record.sourceDb, []);
-    bySource.get(record.sourceDb)!.push(record);
+    const sourceKey = originatingSourceKey(record);
+    if (!bySource.has(sourceKey)) bySource.set(sourceKey, []);
+    bySource.get(sourceKey)!.push(record);
   }
   for (const [, sourceRecords] of bySource) {
     const idGroups = new Map<string, DatabaseRecord[]>();
@@ -487,14 +520,18 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
       continue;
     }
 
-    // Score against every anchored person node.
-    type CandidateHit = { person: MatchedPerson; score: number; signals: number; nameOk: boolean };
+    // Score against every anchored person, including flagged ones (escalate, don't skip).
+    type CandidateHit = {
+      person: MatchedPerson;
+      score: number;
+      signals: number;
+      nameOk: boolean;
+      flagged: boolean;
+    };
     const hits: CandidateHit[] = [];
 
     for (const person of persons) {
       if (!isAnchored(person)) continue;
-      // Spec: don't compound uncertainty into a flagged node.
-      if (person.needsReview) continue;
 
       const anchor = mostRecentRecord(person.records);
       const nameSim = calculateNameSimilarity(name, getMatchName(anchor));
@@ -509,43 +546,65 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
       if (!nameOk && signals < 2) continue;
       if (!nameOk) continue; // Spec: fuzzy is name-based; country/date are corroboration.
 
-      hits.push({ person, score: nameSim, signals, nameOk });
+      hits.push({ person, score: nameSim, signals, nameOk, flagged: person.needsReview });
     }
 
-    // Multiple plausible nodes → manual review (can't disambiguate).
-    const plausible = hits.filter((h) => h.signals >= 1 && h.nameOk);
-    const autoHits = hits.filter((h) => h.signals >= 2 && h.nameOk);
+    const plausibleClean = hits.filter((h) => h.signals >= 1 && h.nameOk && !h.flagged);
+    const autoClean = hits.filter((h) => h.signals >= 2 && h.nameOk && !h.flagged);
+    const autoFlagged = hits.filter((h) => h.signals >= 2 && h.nameOk && h.flagged);
+    const plausibleFlagged = hits.filter((h) => h.signals >= 1 && h.nameOk && h.flagged);
 
-    if (autoHits.length === 1) {
-      const hit = autoHits[0];
-      // Merge into existing node; upgrade provenance confidence to medium-auto if was lower path.
+    if (autoClean.length === 1) {
+      const hit = autoClean[0];
+      incoming.rowMatchConfidence = 'medium-auto';
       hit.person.records.push(incoming);
       hit.person.provenance.push(recordKey(incoming));
       hit.person.skills = collectSkills(hit.person.records);
-      // Rebuild primary fields with conflict resolution.
+      const keepType = hit.person.matchType === 'email' ||
+          hit.person.matchType === 'phone' ||
+          hit.person.matchType === 'source-id'
+        ? hit.person.matchType
+        : 'fuzzy-auto';
+      const keepConfidence = hit.person.matchConfidence === 'high' ||
+          hit.person.matchConfidence === 'medium'
+        ? hit.person.matchConfidence
+        : 'medium-auto';
       const rebuilt = buildPerson(
         hit.person.id,
         hit.person.records,
-        'fuzzy-auto',
-        'medium-auto',
+        keepType,
+        keepConfidence,
         Math.min(hit.person.confidence, Math.round(hit.score * 0.9)),
       );
-      Object.assign(hit.person, rebuilt, {
-        id: hit.person.id,
-        matchType: hit.person.matchType === 'email' || hit.person.matchType === 'phone'
-          ? hit.person.matchType
-          : 'fuzzy-auto',
-        matchConfidence: hit.person.matchConfidence === 'high' || hit.person.matchConfidence === 'medium'
-          ? hit.person.matchConfidence
-          : 'medium-auto',
-      });
+      Object.assign(hit.person, rebuilt, { id: hit.person.id });
       processed.add(recordKey(incoming));
       personByRecord.set(recordKey(incoming), hit.person);
       fuzzyAutoMatches++;
       continue;
     }
 
-    if (autoHits.length > 1 || (plausible.length > 1 && autoHits.length === 0)) {
+    if (autoClean.length === 0 && (autoFlagged.length > 0 || plausibleFlagged.length > 0)) {
+      const hit = autoFlagged[0] || plausibleFlagged[0];
+      const person = buildPerson(
+        `fuzzy-review-${persons.length + 1}`,
+        [incoming, ...hit.person.records.slice(0, 1)],
+        'manual-review',
+        'low',
+        Math.round(hit.score * 0.6),
+        {
+          needsReview: true,
+          reviewReason:
+            `Would merge into flagged node ${hit.person.id} — confirm or reject to avoid compounding uncertainty`,
+        },
+      );
+      persons.push(person);
+      processed.add(recordKey(incoming));
+      personByRecord.set(recordKey(incoming), person);
+      manualReview++;
+      continue;
+    }
+
+    if (autoClean.length > 1 || (plausibleClean.length > 1 && autoClean.length === 0)) {
       const person = buildPerson(
         `fuzzy-review-${persons.length + 1}`,
         [incoming],
@@ -564,9 +623,8 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
       continue;
     }
 
-    if (plausible.length === 1 && plausible[0].signals === 1) {
-      // Exactly 1 of 3 agree → escalate to manual review with suggested target.
-      const hit = plausible[0];
+    if (plausibleClean.length === 1 && plausibleClean[0].signals === 1) {
+      const hit = plausibleClean[0];
       const person = buildPerson(
         `fuzzy-review-${persons.length + 1}`,
         [incoming, ...hit.person.records.slice(0, 1)],
@@ -614,7 +672,7 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
   console.log('Phase 5: Single-record persons...');
   for (const record of seedable) {
     if (processed.has(recordKey(record))) continue;
-    const review = record.isTestRow || record.needsManualFlag || record.phoneUnnormalized;
+    const review = record.needsManualFlag || record.phoneUnnormalized;
     const person = buildPerson(
       `single-${persons.length + 1}`,
       [record],
@@ -624,7 +682,7 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
       review
         ? {
           needsReview: true,
-          reviewReason: record.testReason || record.manualFlagReason ||
+          reviewReason: record.manualFlagReason ||
             (record.phoneUnnormalized ? 'Phone could not be fully normalized (no country code / residence)' : undefined),
         }
         : undefined,
@@ -647,6 +705,25 @@ export function runMatching(loadedData: LoadedData, settings: MatchingSettings) 
         heldOut: true,
         needsReview: true,
         reviewReason: 'Enrichment-only row held out (no match to anchored person)',
+      },
+    );
+    persons.push(person);
+    heldOut++;
+  }
+
+  // Spec Sec. 5: test/placeholder rows are held out until a human confirms exclusion.
+  for (const record of testRecords) {
+    const person = buildPerson(
+      `test-${persons.length + 1}`,
+      [record],
+      'held-out',
+      'none',
+      0,
+      {
+        heldOut: true,
+        needsReview: true,
+        reviewReason: record.testReason ||
+          'Test/placeholder row — confirm exclusion before it enters the person graph',
       },
     );
     persons.push(person);

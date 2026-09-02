@@ -35,6 +35,8 @@ function rebuildSearchText(person: JsonMap): string {
     person.technical_skills,
     person.key_skills,
     person.skill_tags,
+    person.job_title,
+    person.seniority,
     person.candidate_id,
     person.person_id,
     person.id,

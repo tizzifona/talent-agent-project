@@ -170,6 +170,29 @@ const EXPERIENCE_FIELDS: UnifiedFieldDef[] = [
     aliases: ['yearsofexperience', 'yearsexperience', 'experienceyears', 'years'],
   },
   {
+    name: 'years_of_tech_experience',
+    aliases: [
+      'yearsoftechexperience',
+      'yearsoftechnicalexperience',
+      'yearstech',
+      'yearsoftech',
+    ],
+    contains: ['yearsoftech'],
+  },
+  {
+    // Exact aliases only — never match "title" by substring (Deal - Title is junk).
+    name: 'job_title',
+    aliases: [
+      'jobtitle',
+      'currentrole',
+      'currentposition',
+      'position',
+      'jobfunction',
+      'professionaltitle',
+      'statedtitle',
+    ],
+  },
+  {
     name: 'has_tech_experience',
     aliases: ['techexperience', 'hastechexperience'],
     contains: ['priorexperienceinthetechindustry', 'experienceinthetechindustry'],
