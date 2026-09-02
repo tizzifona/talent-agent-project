@@ -892,13 +892,14 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
                 <dt>Education</dt><dd>${escapeHtml(person.highest_education_level || '-')}${person.field_of_study ? ' · ' + escapeHtml(person.field_of_study) : ''}</dd>
                 <dt>Courses</dt><dd>${escapeHtml(person.courses_and_certifications || '-')}</dd>
                 <dt>Experience</dt><dd>${escapeHtml(person.work_experience_summary || '-')}</dd>
-                <dt>Years / tech experience</dt><dd>${escapeHtml(person.years_of_experience || '-')} / ${escapeHtml(person.has_tech_experience || 'unknown')}</dd>
+                <dt>Job title</dt><dd>${escapeHtml(person.job_title || '-')}</dd>
+                <dt>Years / tech years</dt><dd>${escapeHtml(person.years_of_experience || '-')} / ${escapeHtml(person.years_of_tech_experience || '-')}${person.has_tech_experience ? ` · tech: ${escapeHtml(person.has_tech_experience)}` : ''}</dd>
                 <dt>Technical skills</dt><dd>${escapeHtml(person.technical_skills || '-')}</dd>
                 <dt>Key skills</dt><dd>${escapeHtml(person.key_skills || '-')}</dd>
-                <dt>Skill tags</dt><dd>${escapeHtml(person.skill_tags || '-')}</dd>
+                <dt>Skill tags</dt><dd>${escapeHtml(person.skill_tags || '-')}${person.skill_tags_confidence ? ` <span class="muted">(${escapeHtml(person.skill_tags_confidence)}${person.skill_tags_basis ? ' · ' + escapeHtml(person.skill_tags_basis) : ''})</span>` : ''}</dd>
                 <dt>Match</dt><dd>${escapeHtml(person.match_type || '')} / ${escapeHtml(person.match_confidence || '')}</dd>
-                <dt>Employment</dt><dd>${escapeHtml(person.employment_status || 'unknown')}</dd>
-                <dt>Seniority</dt><dd>${escapeHtml(person.seniority || '-')}</dd>
+                <dt>Employment</dt><dd>${escapeHtml(person.employment_status || 'unknown')} <span class="muted">not inferred</span></dd>
+                <dt>Seniority</dt><dd>${escapeHtml(person.seniority || '-')}${person.seniority_confidence ? ` <span class="muted">(${escapeHtml(person.seniority_confidence)}${person.seniority_basis ? ' · ' + escapeHtml(person.seniority_basis) : ''})</span>` : ''}</dd>
                 <dt>Provenance</dt><dd>${escapeHtml(person.provenance_text || '-')}</dd>
                 <dt>Review</dt><dd>${person.needs_review ? escapeHtml(person.review_reason || 'Needs review') : escapeHtml(person.review_status || 'Clean')}</dd>
                 ${person.review_decided_by ? `<dt>Decided by</dt><dd>${escapeHtml(person.review_decided_by)} · ${escapeHtml(person.review_decided_at || '')}</dd>` : ''}
@@ -1214,14 +1215,20 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
             field_of_study: person.field_of_study || '',
             courses_and_certifications: person.courses_and_certifications || '',
             work_experience_summary: person.work_experience_summary || '',
+            job_title: person.job_title || '',
             years_of_experience: person.years_of_experience || '',
+            years_of_tech_experience: person.years_of_tech_experience || '',
             has_tech_experience: person.has_tech_experience || '',
             github_url: person.github_url || '',
             technical_skills: person.technical_skills || '',
             key_skills: person.key_skills || '',
             skill_tags: person.skill_tags || (person.skills || []).join(' | '),
+            skill_tags_confidence: person.skill_tags_confidence || '',
+            skill_tags_basis: person.skill_tags_basis || '',
             employment_status: person.employment_status || '',
             seniority: person.seniority || '',
+            seniority_confidence: person.seniority_confidence || '',
+            seniority_basis: person.seniority_basis || '',
             match_type: person.match_type || person.matchType || '',
             match_confidence: person.match_confidence || person.matchConfidence || '',
             needs_review: (person.needs_review || person.needsReview) ? 'YES' : '',

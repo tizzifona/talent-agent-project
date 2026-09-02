@@ -52,6 +52,13 @@ interface MatchedPerson {
   needsReview?: boolean;
   reviewReason?: string;
   heldOut?: boolean;
+  skillTags?: string;
+  seniority?: string;
+  enrichment?: Record<string, {
+    source?: string;
+    confidence_tier?: string;
+    inference_basis?: string;
+  }>;
 }
 
 interface InternalAccount {
@@ -110,7 +117,10 @@ const LIST_SELECT = [
   'technical_skills',
   'key_skills',
   'years_of_experience',
+  'years_of_tech_experience',
+  'job_title',
   'skill_tags',
+  'skill_tags_confidence',
   'match_type',
   'match_confidence',
   'confidence_pct',
@@ -120,6 +130,7 @@ const LIST_SELECT = [
   'record_count',
   'employment_status',
   'seniority',
+  'seniority_confidence',
   'review_status',
   'suggested_merge_id',
   'merged_into',
@@ -194,7 +205,10 @@ function personObject(person: MatchedPerson, runId: string, stableId: string): J
     // residence or origin.
     country: person.country || '',
     ...descriptive,
-    skill_tags: joinTags(person.skills || []),
+    skill_tags: person.skillTags || '',
+    skill_tags_source: person.enrichment?.skill_tags?.source || '',
+    skill_tags_confidence: person.enrichment?.skill_tags?.confidence_tier || '',
+    skill_tags_basis: person.enrichment?.skill_tags?.inference_basis || '',
     match_type: person.matchType || '',
     match_confidence: person.matchConfidence || '',
     confidence_pct: person.confidence || 0,
@@ -204,7 +218,10 @@ function personObject(person: MatchedPerson, runId: string, stableId: string): J
     record_count: records.length,
     readiness_score: readiness,
     employment_status: '',
-    seniority: '',
+    seniority: person.seniority || '',
+    seniority_source: person.enrichment?.seniority?.source || '',
+    seniority_confidence: person.enrichment?.seniority?.confidence_tier || '',
+    seniority_basis: person.enrichment?.seniority?.inference_basis || '',
     all_emails: joinTags(Array.from(emails)),
     all_phones: joinTags(Array.from(phones)),
     provenance_text: (person.provenance || []).join(' | '),
@@ -231,7 +248,10 @@ function personObject(person: MatchedPerson, runId: string, stableId: string): J
       unified.languages,
       unified.technical_skills,
       unified.key_skills,
+      unified.job_title,
       unified.field_of_study,
+      person.skillTags,
+      person.seniority,
       joinTags(person.skills || []),
       candidateIdFrom(stableId),
       person.id,
