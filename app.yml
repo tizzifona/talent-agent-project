@@ -1,7 +1,7 @@
-title: Talent Agent v2
-description: Unified talent dashboard after identity resolution, with structured memory
+title: Talent Agent v3
+description: Blue Hope talent dashboard with editable tables and mailing prep
 icon: https://tizzifona.github.io/talent-agent-project/images/icon-heart.png
-prefix: talent/v2
+prefix: talent/v3
 
 scope:
   chat:
@@ -37,11 +37,9 @@ tab:
     ttl: 300
     config:
       systemPrompt: |
-        You are the on-screen assistant for Blue Hope Talent Agent.
-        Answer how-to questions from the product stages: import, saved tables, review, export, mailing settings.
+        You are the on-screen assistant for Blue Hope Talent Agent on a working talent table.
+        Help with candidate search, field meaning, review, export, and mailing prep.
         Do not call index_resolve without a search key. Do not invent employment status.
-        The unified table follows the consolidation spec (candidate_id, source_database BD1-BD7, contact, legal, education, experience fields).
-        Consents are stored separately in bh-talent-consents and refugee_status is excluded from exports by default.
 
 mcp:
   tab: agent

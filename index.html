@@ -3,17 +3,17 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Talent Agent v2</title>
-    <link rel="webdaemon" href="app.yml" prefix="talent/v2">
+    <title>Talent Agent v3</title>
+    <link rel="webdaemon" href="app.yml" prefix="talent/v3">
     <link rel="icon" type="image/png" href="images/icon-heart.png">
     <link rel="apple-touch-icon" href="images/icon-heart.png">
-    <meta property="og:title" content="Talent Agent v2">
-    <meta property="og:description" content="Unified talent dashboard after identity resolution">
+    <meta property="og:title" content="Talent Agent v3">
+    <meta property="og:description" content="Blue Hope talent dashboard">
     <meta property="og:image" content="https://tizzifona.github.io/talent-agent-project/images/icon-heart.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=5">
+    <link rel="stylesheet" href="app.css?v=6">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -21,43 +21,18 @@
       <div class="grid-lines" aria-hidden="true"></div>
       <div class="teal-glow" aria-hidden="true"></div>
       <header class="topbar">
+        <button id="back-btn" class="back-btn" type="button" title="Go back">← Back</button>
         <button id="home-btn" class="brand">Talent Agent</button>
-        <p id="crumb" class="crumb">Welcome</p>
+        <p id="crumb" class="crumb">Dashboard</p>
         <div id="connection-status" class="status-badge">Connecting...</div>
       </header>
 
-      <div class="layout">
+      <div class="layout chat-hidden">
       <main id="stage">
-        <section class="view active" id="view-welcome">
-          <p class="page-kicker">Blue Hope talent database</p>
-          <h1>Clean the list. Then work with it.</h1>
-          <p class="lede">This app takes overlapping talent files, builds one person per contact, and keeps that table ready for review, export, or outreach. The assistant on the right stays with you on every step.</p>
-          <div class="intro-list">
-            <div class="intro-item">
-              <span class="choice-num">01 · Import</span>
-              <strong>Deduplicate overlapping files</strong>
-              <span>Upload CSV or Excel sources. Matching uses email, then phone, then a cautious name check. Uncertain rows go to review instead of being guessed.</span>
-            </div>
-            <div class="intro-item">
-              <span class="choice-num">02 · Tables</span>
-              <strong>Keep a working table</strong>
-              <span>Each successful run is saved. You can preview people, rename the table, export CSV or Excel, or remove it from the library.</span>
-            </div>
-            <div class="intro-item">
-              <span class="choice-num">03 · Outreach</span>
-              <strong>Prepare mailing later</strong>
-              <span>When a table is ready, mailing settings let you choose who would be contacted. Sending still belongs to the re-engagement step; this page only prepares the segment.</span>
-            </div>
-          </div>
-          <div class="btn-row">
-            <button id="welcome-start-btn" class="primary-btn">Choose a stage</button>
-          </div>
-        </section>
-
-        <section class="view" id="view-hub">
-          <p class="page-kicker">Stage</p>
-          <h1>What do you want to do now?</h1>
-          <p class="lede">Pick one path. You can come back here from the title at any time.</p>
+        <section class="view active" id="view-hub">
+          <p class="page-kicker">Blue Hope</p>
+          <h1>Welcome to Blue Hope talent dashboard</h1>
+          <p class="lede">Pick one path. You can return here from the title at any time.</p>
           <div class="choice-grid">
             <button class="choice-card" data-view="import">
               <span class="choice-num">01 · Discovery</span>
@@ -68,13 +43,13 @@
             <button class="choice-card" data-view="tables">
               <span class="choice-num">02 · Working table</span>
               <h2>Saved tables</h2>
-              <p>Preview, rename, upload another run, or delete a finished table.</p>
+              <p>Open a table to edit people, export, or start mailing.</p>
               <p class="when">Use this when matching already ran and you want to work with the result.</p>
             </button>
             <button class="choice-card" data-view="mailing">
               <span class="choice-num">03 · Outreach</span>
               <h2>Mailing from a table</h2>
-              <p>Choose a saved table and a segment for outreach. Nothing is sent from this screen yet.</p>
+              <p>Compose a campaign, pick a template, and prepare temporary update links.</p>
               <p class="when">Use this after review, when the list is clean enough to message.</p>
             </button>
           </div>
@@ -150,11 +125,11 @@
             </button>
             <button class="choice-card" data-view="workspace">
               <h2>Open the table</h2>
-              <p>Preview people and resolve the review queue before outreach.</p>
+              <p>Edit people, resolve review, and use Magic expert chat.</p>
             </button>
             <button class="choice-card" data-view="mailing">
               <h2>Set up mailing</h2>
-              <p>Choose a segment from this table. Sending is not enabled yet.</p>
+              <p>Compose templates and prepare temporary candidate links.</p>
             </button>
           </div>
         </section>
@@ -173,10 +148,11 @@
         <section class="view" id="view-workspace">
           <p class="page-kicker">Working table</p>
           <h1 id="workspace-title">People</h1>
-          <p class="lede">Preview the unified contacts. Switch to Review for rows that still need a human decision.</p>
+          <p class="lede">Edit candidates in place, export, or continue to mailing. The Magic expert chat on the right helps with quick search.</p>
           <div class="subnav" id="workspace-subnav">
-            <button data-panel="people" class="active">Preview</button>
+            <button data-panel="people" class="active">People</button>
             <button data-panel="review">Review</button>
+            <button data-panel="approvals">Pending updates</button>
           </div>
           <div id="panel-people">
             <section class="card">
@@ -210,6 +186,7 @@
                 <div class="filter-actions">
                   <button id="people-apply-btn" class="primary-btn">Apply</button>
                   <button id="people-reset-btn" class="secondary-btn">Reset</button>
+                  <button id="people-add-btn" class="primary-btn">Add candidate</button>
                 </div>
               </div>
               <div class="people-meta">
@@ -222,7 +199,7 @@
                   <thead>
                     <tr>
                       <th>Name</th><th>Email</th><th>Phone</th><th>Country</th>
-                      <th>Skills</th><th>Match</th><th>Confidence</th><th>Review</th>
+                      <th>Skills</th><th>Match</th><th>Confidence</th><th>Review</th><th>Actions</th>
                     </tr>
                   </thead>
                   <tbody id="people-body"></tbody>
@@ -254,12 +231,19 @@
               <div id="internal-list"></div>
             </section>
           </div>
+          <div id="panel-approvals" class="hidden">
+            <section class="card">
+              <h2>Candidate update requests</h2>
+              <p class="upload-hint">Approve to write changes into the table row. Reject keeps the current data.</p>
+              <div id="pending-list"></div>
+            </section>
+          </div>
         </section>
 
         <section class="view" id="view-mailing">
           <p class="page-kicker">Outreach</p>
-          <h1>Mailing settings</h1>
-          <p class="lede">Choose who would receive the next campaign. The assistant can explain the segment. Actual sending is a later step.</p>
+          <h1>Mailing campaign</h1>
+          <p class="lede">Compose a message, pick one of five editable templates, set frequency and schedule. Each recipient gets a 3-day temporary link. Email is prepared and stored; sending is not wired yet.</p>
           <section class="card">
             <div class="settings-grid">
               <div class="setting-item">
@@ -274,28 +258,80 @@
                   <option value="employment">Employment status unknown</option>
                 </select>
               </div>
+              <div class="setting-item">
+                <label for="mailing-frequency">Frequency</label>
+                <select id="mailing-frequency">
+                  <option value="once">Once</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Every 2 weeks</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+              <div class="setting-item">
+                <label for="mailing-schedule">Schedule / timer</label>
+                <input type="datetime-local" id="mailing-schedule">
+              </div>
             </div>
             <p class="upload-hint" id="mailing-count">Select a table to see segment size.</p>
+          </section>
+          <section class="card">
+            <h2>Templates</h2>
+            <div id="mailing-templates" class="template-grid"></div>
+            <div class="settings-grid" style="margin-top: 16px;">
+              <div class="setting-item" style="grid-column: 1 / -1;">
+                <label for="mailing-subject">Subject</label>
+                <input type="text" id="mailing-subject" placeholder="Email subject">
+              </div>
+              <div class="setting-item" style="grid-column: 1 / -1;">
+                <label for="mailing-body">Message (use {{first_name}}, {{update_link}}, {{job_title}}, …)</label>
+                <textarea id="mailing-body" rows="10"></textarea>
+              </div>
+            </div>
             <div class="btn-row">
+              <button id="mailing-save-template-btn" class="secondary-btn">Save template edits</button>
               <button id="mailing-refresh-btn" class="secondary-btn">Refresh count</button>
-              <button id="mailing-open-table-btn" class="primary-btn">Open this table</button>
+              <button id="mailing-prepare-btn" class="primary-btn">Prepare campaign &amp; links</button>
+              <button id="mailing-open-table-btn" class="secondary-btn">Open this table</button>
+            </div>
+          </section>
+          <section class="card">
+            <h2>Prepared messages</h2>
+            <p class="upload-hint" id="mailing-prepare-note">Nothing prepared yet.</p>
+            <div id="mailing-prepared" class="prepared-list"></div>
+          </section>
+          <section class="card">
+            <h2>Pending candidate replies</h2>
+            <div id="mailing-pending"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-candidate">
+          <p class="page-kicker">Secure link</p>
+          <h1>Your Blue Hope profile</h1>
+          <p class="lede" id="candidate-lede">This temporary link lets you update your data or opt out of the talent database. It expires after 3 days.</p>
+          <section class="card" id="candidate-form-card">
+            <div id="candidate-status" class="upload-hint"></div>
+            <div id="candidate-fields" class="settings-grid"></div>
+            <div class="btn-row" id="candidate-actions" style="display: none;">
+              <button id="candidate-submit-btn" class="primary-btn">Submit update</button>
+              <button id="candidate-optout-btn" class="secondary-btn danger-outline">Opt out of talent database</button>
             </div>
           </section>
         </section>
       </main>
 
-      <aside class="agent-rail">
+      <aside class="agent-rail" id="agent-rail">
         <div class="agent-head">
-          <h2>Assistant</h2>
+          <h2>Magic expert</h2>
           <span class="agent-live">Active</span>
         </div>
-        <p class="agent-role">On every step — import, tables, review, mailing. Daemon <strong id="daemon-party">...</strong></p>
+        <p class="agent-role">Quick candidate search for this table. Daemon <strong id="daemon-party">...</strong></p>
         <div class="agent-tools">
           <button id="chat-check-btn" class="action-btn">Check connection</button>
         </div>
         <div id="chat-messages" class="chat-container"></div>
         <div class="chat-input-container">
-          <input type="text" id="chat-input" placeholder="Ask about this step..." disabled>
+          <input type="text" id="chat-input" placeholder="Ask about candidates in this table..." disabled>
           <button id="send-chat-btn" disabled>Send</button>
         </div>
       </aside>
@@ -309,6 +345,22 @@
           </div>
           <div class="modal-body">
             <div id="report-content"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="edit-modal" class="modal-overlay">
+        <div class="modal-content merge-modal">
+          <div class="modal-header">
+            <h3 id="edit-modal-title">Edit candidate</h3>
+            <button id="edit-modal-close" class="modal-close">✕</button>
+          </div>
+          <div class="modal-body">
+            <div id="edit-fields" class="settings-grid"></div>
+            <div class="btn-row">
+              <button id="edit-save-btn" class="primary-btn">Save</button>
+              <button id="edit-cancel-btn" class="secondary-btn">Cancel</button>
+            </div>
           </div>
         </div>
       </div>
@@ -335,44 +387,44 @@
         from 'https://webdaemon.online/latest/static/lib/dist/index.js';
 
       const PAGE_SIZE = 25;
-      const DECLARED_PREFIX = 'talent/v2';
-      const CHAT_SYSTEM_PROMPT = `You are the on-screen assistant for Blue Hope Talent Agent.
-The product has three stages:
-1. Upload and deduplicate CSV or Excel files into one person per contact (email, then phone, then a cautious name check; uncertain rows go to review).
-2. Saved tables: preview people, rename, export CSV or Excel, review, or delete from the library.
-3. Mailing settings: choose a table and a segment. Sending is not enabled yet.
-
-The unified table follows the consolidation spec: candidate_id and source_database (BD1-BD7); first_name and last_names; gender, age, country_of_origin, country_of_residence, city_of_residence; primary_email, secondary_email, phone_number, preferred_contact_method, linkedin_url; legal_status, refugee_status, work_permission; languages, english_level (A1-C2, Native, Unknown), highest_education_level, field_of_study, courses_and_certifications; work_experience_summary, years_of_experience, has_tech_experience, github_url, technical_skills, key_skills.
-Consents live in their own collection with privacy_policy_accepted, data_processing_consent, and future_contact_consent as separate fields. refugee_status is sensitive and is left out of exported files unless the operator ticks the box.
-
-Answer how-to and product questions from this description. Do not call index_search, index_resolve, or structured_get for those questions.
-Only query structured memory collections bh-talent-persons, bh-talent-tables, bh-talent-internal, bh-talent-runs, bh-talent-consents, and bh-talent-review-actions when the user asks about people or saved tables.
-Never call index_resolve without a key returned by index_search.
-If a tool fails, answer from this guide. Do not invent employment_status.`;
+      const DECLARED_PREFIX = 'talent/v3';
+      const EDITABLE_FIELDS = [
+        'first_name', 'last_names', 'primary_email', 'secondary_email', 'phone_number',
+        'preferred_contact_method', 'linkedin_url', 'gender', 'age', 'country_of_origin',
+        'country_of_residence', 'city_of_residence', 'legal_status', 'refugee_status',
+        'work_permission', 'languages', 'english_level', 'highest_education_level',
+        'field_of_study', 'courses_and_certifications', 'work_experience_summary',
+        'job_title', 'years_of_experience', 'years_of_tech_experience', 'has_tech_experience',
+        'github_url', 'technical_skills', 'key_skills', 'employment_status',
+      ];
+      const FIELD_LABELS = Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, f.replace(/_/g, ' ')]));
+      const CHAT_SYSTEM_PROMPT = `You are the Magic expert chat for Blue Hope Talent Agent on an open talent table.
+Help the operator find and understand candidates quickly. Answer from the product and structured memory when needed.
+Do not invent employment_status. refugee_status is sensitive.`;
       const LOCAL_ANSWERS = [
         {
           match: /field|column|schema|consent|permission|privacy|refugee|language level|english level/i,
-          text: 'The table uses the unified schema: candidate_id and source_database (BD1-BD7), name, demographics and location, contact details, legal status and work permission, languages and education, and professional experience with technical and key skills. English level is mapped onto A1-C2, Native, or Unknown, and the original wording is kept next to it. The three consents (privacy policy, data processing, future contact) are stored separately, never merged into one Permission column. Refugee status is sensitive, so it stays out of exported files unless you tick the box next to the export buttons.',
+          text: 'The table uses the unified schema: candidate_id and source_database (BD1-BD7), name, demographics and location, contact details, legal status and work permission, languages and education, and professional experience with technical and key skills. Consents are stored separately. Refugee status is sensitive.',
         },
         {
           match: /review|merge|confirm|reject|uncertain|duplicate\?/i,
-          text: 'Review holds rows the matcher could not decide alone. Open a saved table, switch to Review, then confirm the person, reject them (they stay held out), or merge them into another person. Every decision is recorded and survives a re-import.',
+          text: 'Use Review for uncertain rows. Confirm keeps the person, reject holds them out, merge folds them into another person. Pending candidate link replies appear under Pending updates.',
         },
         {
-          match: /mail|outreach|campaign|segment|send/i,
-          text: 'Mailing settings let you pick a saved table and a segment: everyone, only rows still needing review, or unknown employment status. It shows how many people match. Actual sending belongs to the re-engagement step and is not enabled yet.',
+          match: /mail|outreach|campaign|segment|send|template|link/i,
+          text: 'Mailing prepares a campaign with five editable templates, frequency, and schedule. Each person gets a 3-day temporary link to update data or opt out. Admin must approve updates. Email sending is not wired yet.',
         },
         {
           match: /export|download|xlsx|excel file|csv file/i,
-          text: 'You can export from two places: right after matching on the "table is ready" screen, or from the working table. Both give you CSV or Excel of the unique people, with match type, confidence, and the source files each person came from.',
+          text: 'Export CSV or Excel from the working table or the table-ready screen.',
         },
         {
-          match: /table|saved|rename|delete|library|preview/i,
-          text: 'Saved tables is your library. Each matching run is stored there with its name, people count, and date. From a row you can preview the people, rename the table, jump to mailing, or delete it from the library.',
+          match: /table|saved|rename|delete|library|preview|edit|add|candidate/i,
+          text: 'Open a saved table to add, edit, or remove candidates. Export and mailing stay available from that page.',
         },
         {
           match: /upload|import|csv|excel|file|dedup|match|clean/i,
-          text: 'Start with Upload and deduplicate. Select up to 10 CSV or Excel files, name the table, then run deduplication. Matching goes email first, then phone, then a cautious name check; anything uncertain goes to review instead of being merged silently.',
+          text: 'Upload up to 10 CSV or Excel files, name the table, then run deduplication. Matching goes email, phone, then cautious name check.',
         },
       ];
 
@@ -380,26 +432,26 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
         for (const entry of LOCAL_ANSWERS) {
           if (entry.match.test(question)) return entry.text;
         }
-        return 'This app has three stages. First, upload CSV or Excel files and deduplicate them into one person per contact. Second, work with the saved table: preview people, resolve the review queue, rename, or export to CSV or Excel. Third, open mailing settings to choose who would be contacted later. Ask me about any of those steps.';
+        return 'Open a talent table for Magic expert help, or use Import, Saved tables, and Mailing from the dashboard.';
       }
 
       const AGENT_GUIDES = {
-        welcome: 'This app builds one person per contact from overlapping talent files, then lets you review, export, or prepare mailing. I stay on the right for every step.',
-        hub: 'Pick one path. Import if you have new files. Saved tables if matching already ran. Mailing when a table is ready to message.',
-        import: 'Upload the source files first. I match by email, then phone, then a cautious name check. Uncertain rows go to review instead of being guessed.',
-        next: 'The unified table is saved. Export it, open it to review uncertain rows, or set up mailing from this list.',
-        tables: 'These are saved working tables. Preview opens the people list. Rename keeps the data. Delete hides the table from this library.',
-        workspace: 'This is the live table. Use Review for rows the matcher could not decide. Confirm, reject, or merge those before outreach.',
-        mailing: 'Nothing is sent from here yet. Choose a table and a segment so we know who would receive the next campaign.',
+        hub: 'Welcome to Blue Hope talent dashboard. Choose import, a saved table, or mailing prep.',
+        import: 'Upload source files. Matching uses email, then phone, then a cautious name check.',
+        next: 'The unified table is saved. Open it to edit people, export, or set up mailing.',
+        tables: 'Open a table to work with people in the app. Rename or delete from the library.',
+        workspace: 'Edit candidates here. Ask me to help search this table. Pending updates need your approval.',
+        mailing: 'Pick a template, set frequency and schedule, then prepare links. Sending is stored, not emailed yet.',
+        candidate: 'This is a private 3-day link. Update your data or opt out. An admin confirms changes.',
       };
       const CRUMBS = {
-        welcome: 'Welcome',
-        hub: 'Choose a stage',
+        hub: 'Dashboard',
         import: 'Upload and deduplicate',
         next: 'Table ready',
         tables: 'Saved tables',
         workspace: 'Working table',
-        mailing: 'Mailing settings',
+        mailing: 'Mailing campaign',
+        candidate: 'Candidate link',
       };
 
       function escapeHtml(value) {
@@ -423,11 +475,18 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
           this.people = { records: [], count: 0, offset: 0 };
           this.mergeSourceId = '';
           this.currentTable = null;
-          this.currentView = 'welcome';
+          this.currentView = 'hub';
+          this.viewHistory = [];
+          this.skipGuideOnce = true;
+          this.editingPersonId = null;
+          this.selectedTemplateId = '';
+          this.candidateToken = '';
           this.MAX_FILES = 10;
         }
 
         async init() {
+          const params = new URLSearchParams(window.location.search);
+          this.candidateToken = params.get('token') || '';
           try {
             this.app = await BrowserApp.getInstance('TalentAgent');
 
@@ -435,6 +494,11 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
               this.showError('Please launch this app from your Web Daemon shell!');
               document.getElementById('connection-status').textContent = 'Not Connected';
               document.getElementById('connection-status').classList.add('error');
+              if (this.candidateToken) {
+                document.getElementById('candidate-status').textContent =
+                  'Open this link from the Blue Hope Web Daemon app to submit updates.';
+                this.switchView('candidate', { replace: true, silent: true });
+              }
               return;
             }
 
@@ -468,8 +532,13 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
             document.getElementById('send-chat-btn').disabled = false;
             this.setupEventListeners();
             await this.refreshDashboard();
-            const tables = await this.safeListTables();
-            this.switchView(tables.length ? 'hub' : 'welcome');
+
+            if (this.candidateToken) {
+              this.switchView('candidate', { replace: true, silent: true });
+              await this.loadCandidatePortal();
+            } else {
+              this.switchView('hub', { replace: true, silent: true });
+            }
           } catch (error) {
             console.error('Initialization error:', error);
             this.showError(`Failed to initialize: ${error.message}`);
@@ -479,8 +548,8 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
         }
 
         setupEventListeners() {
+          document.getElementById('back-btn').addEventListener('click', () => this.goBack());
           document.getElementById('home-btn').addEventListener('click', () => this.switchView('hub'));
-          document.getElementById('welcome-start-btn').addEventListener('click', () => this.switchView('hub'));
           document.getElementById('stage').addEventListener('click', (event) => {
             const choice = event.target.closest('[data-view]');
             if (choice) this.switchView(choice.dataset.view);
@@ -501,6 +570,20 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
           document.getElementById('mailing-open-table-btn').addEventListener('click', () => this.openSelectedMailingTable());
           document.getElementById('mailing-table').addEventListener('change', () => this.refreshMailingCount());
           document.getElementById('mailing-segment').addEventListener('change', () => this.refreshMailingCount());
+          document.getElementById('mailing-prepare-btn').addEventListener('click', () => this.prepareMailing());
+          document.getElementById('mailing-save-template-btn').addEventListener('click', () => this.saveCurrentTemplate());
+          document.getElementById('mailing-templates').addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-template-id]');
+            if (btn) this.selectTemplate(btn.dataset.templateId);
+          });
+          document.getElementById('mailing-pending').addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-pending-action]');
+            if (btn) this.reviewPending(btn.dataset.pendingId, btn.dataset.pendingAction);
+          });
+          document.getElementById('pending-list').addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-pending-action]');
+            if (btn) this.reviewPending(btn.dataset.pendingId, btn.dataset.pendingAction);
+          });
 
           document.getElementById('select-files-btn').addEventListener('click', () => {
             document.getElementById('file-input').click();
@@ -516,6 +599,15 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
           document.getElementById('report-modal').addEventListener('click', (e) => {
             if (e.target.id === 'report-modal') this.closeModal();
           });
+          document.getElementById('edit-modal-close').addEventListener('click', () => this.closeEditModal());
+          document.getElementById('edit-cancel-btn').addEventListener('click', () => this.closeEditModal());
+          document.getElementById('edit-save-btn').addEventListener('click', () => this.savePersonForm());
+          document.getElementById('edit-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'edit-modal') this.closeEditModal();
+          });
+          document.getElementById('people-add-btn').addEventListener('click', () => this.openPersonEditor(null));
+          document.getElementById('candidate-submit-btn').addEventListener('click', () => this.submitCandidate('update'));
+          document.getElementById('candidate-optout-btn').addEventListener('click', () => this.submitCandidate('opt_out'));
           document.getElementById('chat-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.sendChatMessage();
           });
@@ -551,11 +643,18 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
           });
           document.getElementById('merge-search').addEventListener('input', () => this.loadMergeTargets());
           const openPerson = (event) => {
-            if (event.target.closest('[data-review-action]')) return;
+            if (event.target.closest('[data-review-action], [data-person-action]')) return;
             const link = event.target.closest('.person-link');
             if (link) this.showPerson(link.dataset.personId);
           };
-          document.getElementById('people-body').addEventListener('click', openPerson);
+          document.getElementById('people-body').addEventListener('click', (event) => {
+            const actionBtn = event.target.closest('[data-person-action]');
+            if (actionBtn) {
+              this.handlePersonAction(actionBtn.dataset.personId, actionBtn.dataset.personAction);
+              return;
+            }
+            openPerson(event);
+          });
           document.getElementById('review-queue').addEventListener('click', (event) => {
             const actionBtn = event.target.closest('[data-review-action]');
             if (actionBtn) {
@@ -581,6 +680,10 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
                 actionBtn.dataset.targetId,
               );
             }
+            const personBtn = event.target.closest('[data-person-action]');
+            if (personBtn) {
+              this.handlePersonAction(personBtn.dataset.personId, personBtn.dataset.personAction);
+            }
           });
           document.getElementById('merge-suggested').addEventListener('click', (event) => {
             const btn = event.target.closest('[data-review-action="merge"]');
@@ -588,22 +691,42 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
           });
         }
 
-        switchView(name) {
+        goBack() {
+          const prev = this.viewHistory.pop();
+          if (prev) this.switchView(prev, { replace: true });
+          else this.switchView('hub', { replace: true });
+        }
+
+        setChatVisible(visible) {
+          document.querySelector('.layout')?.classList.toggle('chat-hidden', !visible);
+        }
+
+        switchView(name, options = {}) {
+          const { replace = false, silent = false } = options;
+          if (!replace && this.currentView && this.currentView !== name) {
+            this.viewHistory.push(this.currentView);
+            if (this.viewHistory.length > 30) this.viewHistory.shift();
+          }
           this.currentView = name;
           document.querySelectorAll('.view').forEach((view) => {
             view.classList.toggle('active', view.id === `view-${name}`);
           });
           document.getElementById('crumb').textContent = CRUMBS[name] || name;
-          this.guideFor(name);
+          document.getElementById('back-btn').style.visibility = name === 'hub' || name === 'candidate' ? 'hidden' : 'visible';
+          this.setChatVisible(name === 'workspace');
+          if (!silent && !this.skipGuideOnce) this.guideFor(name);
+          this.skipGuideOnce = false;
           if (name === 'tables') this.loadTables();
           if (name === 'workspace') {
             this.showWorkspacePanel('people');
             this.loadPeople();
           }
           if (name === 'mailing') this.loadMailing();
+          if (name === 'candidate' && this.candidateToken) this.loadCandidatePortal();
         }
 
         guideFor(name) {
+          if (name !== 'workspace') return;
           const text = AGENT_GUIDES[name];
           if (!text) return;
           const last = document.querySelector('#chat-messages .chat-message.assistant:last-child');
@@ -617,8 +740,10 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
           });
           document.getElementById('panel-people').classList.toggle('hidden', panel !== 'people');
           document.getElementById('panel-review').classList.toggle('hidden', panel !== 'review');
+          document.getElementById('panel-approvals').classList.toggle('hidden', panel !== 'approvals');
           if (panel === 'review') this.loadReview();
           if (panel === 'people') this.loadPeople();
+          if (panel === 'approvals') this.loadPendingUpdates('pending-list');
         }
 
         async detectAgentPrefix() {
@@ -733,7 +858,12 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
               : '';
             const extra = includeReviewReason
               ? `<td>${escapeHtml(person.review_reason || '')}</td><td>${this.reviewActions(person)}</td>`
-              : '';
+              : `<td>
+                  <div class="row-actions">
+                    <button class="action-btn" data-person-action="edit" data-person-id="${escapeHtml(person.id)}">Edit</button>
+                    <button class="action-btn danger" data-person-action="delete" data-person-id="${escapeHtml(person.id)}">Delete</button>
+                  </div>
+                </td>`;
             return `
               <tr class="${person.needs_review ? 'needs-review-row' : ''}">
                 <td><button class="person-link" data-person-id="${escapeHtml(person.id)}">${escapeHtml(name)}</button></td>
@@ -872,7 +1002,11 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
             `).join('');
 
             document.getElementById('report-content').innerHTML = `
-              ${person.needs_review ? `<div class="row-actions modal-actions">${this.reviewActions(person)}</div>` : ''}
+              <div class="row-actions modal-actions">
+                <button class="action-btn" data-person-action="edit" data-person-id="${escapeHtml(person.id)}">Edit</button>
+                <button class="action-btn danger" data-person-action="delete" data-person-id="${escapeHtml(person.id)}">Delete</button>
+                ${person.needs_review ? this.reviewActions(person) : ''}
+              </div>
               <dl class="detail-grid">
                 <dt>Candidate ID</dt><dd><code>${escapeHtml(person.candidate_id || '-')}</code> <span class="muted">${escapeHtml(person.id)}</span></dd>
                 <dt>Source databases</dt><dd>${escapeHtml(person.source_database || '-')}</dd>
@@ -924,6 +1058,80 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
 
         closeModal() {
           document.getElementById('report-modal').classList.remove('active');
+        }
+
+        renderFieldInputs(containerId, values = {}, prefix = 'field') {
+          const container = document.getElementById(containerId);
+          container.innerHTML = EDITABLE_FIELDS.map((field) => `
+            <div class="setting-item">
+              <label for="${prefix}-${field}">${escapeHtml(FIELD_LABELS[field] || field)}</label>
+              <input id="${prefix}-${field}" type="text" data-field="${field}" value="${escapeHtml(values[field] || '')}">
+            </div>
+          `).join('');
+        }
+
+        readFieldInputs(prefix = 'field') {
+          const fields = {};
+          for (const name of EDITABLE_FIELDS) {
+            const input = document.getElementById(`${prefix}-${name}`);
+            fields[name] = input ? input.value.trim() : '';
+          }
+          return fields;
+        }
+
+        async openPersonEditor(personId) {
+          this.editingPersonId = personId;
+          document.getElementById('edit-modal-title').textContent = personId ? 'Edit candidate' : 'Add candidate';
+          let values = {};
+          if (personId) {
+            const result = await this.agentPost('/persons/get', { id: personId });
+            values = result.record || {};
+          }
+          this.renderFieldInputs('edit-fields', values, 'edit');
+          document.getElementById('edit-modal').classList.add('active');
+        }
+
+        closeEditModal() {
+          document.getElementById('edit-modal').classList.remove('active');
+          this.editingPersonId = null;
+        }
+
+        async savePersonForm() {
+          const fields = this.readFieldInputs('edit');
+          try {
+            if (this.editingPersonId) {
+              await this.agentPost('/persons/update', { id: this.editingPersonId, fields });
+            } else {
+              if (!this.currentTable?.run_id) throw new Error('Open a saved table first');
+              await this.agentPost('/persons/create', { ...fields, run_id: this.currentTable.run_id });
+            }
+            this.closeEditModal();
+            this.closeModal();
+            await this.loadPeople();
+            await this.refreshDashboard();
+          } catch (error) {
+            this.showError(`Save failed: ${error.message}`);
+          }
+        }
+
+        async handlePersonAction(personId, action) {
+          if (!personId || !action) return;
+          if (action === 'edit') {
+            this.closeModal();
+            await this.openPersonEditor(personId);
+            return;
+          }
+          if (action === 'delete') {
+            if (!confirm('Remove this candidate from the working table?')) return;
+            try {
+              await this.agentPost('/persons/delete', { id: personId });
+              this.closeModal();
+              await this.loadPeople();
+              await this.refreshDashboard();
+            } catch (error) {
+              this.showError(`Delete failed: ${error.message}`);
+            }
+          }
         }
 
         closeMergeModal() {
@@ -1319,7 +1527,7 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
                 <span class="table-sub">${escapeHtml(String(table.person_count || 0))} people · ${escapeHtml(table.created_at ? new Date(table.created_at).toLocaleString() : '')}</span>
               </div>
               <div class="table-actions">
-                <button class="action-btn" data-table-action="preview" data-table-id="${escapeHtml(table.id)}">Preview</button>
+                <button class="action-btn" data-table-action="preview" data-table-id="${escapeHtml(table.id)}">Open</button>
                 <button class="action-btn" data-table-action="rename" data-table-id="${escapeHtml(table.id)}">Rename</button>
                 <button class="action-btn" data-table-action="mailing" data-table-id="${escapeHtml(table.id)}">Mailing</button>
                 <button class="action-btn danger" data-table-action="delete" data-table-id="${escapeHtml(table.id)}">Delete</button>
@@ -1368,7 +1576,197 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
                 </option>
               `).join('')
             : '<option value="">No saved tables</option>';
+          const schedule = document.getElementById('mailing-schedule');
+          if (!schedule.value) {
+            const local = new Date();
+            local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+            schedule.value = local.toISOString().slice(0, 16);
+          }
           await this.refreshMailingCount();
+          await this.loadTemplates();
+          await this.loadPendingUpdates('mailing-pending');
+        }
+
+        async loadTemplates() {
+          try {
+            const result = await this.agentPost('/mailing/templates');
+            const templates = result.records || [];
+            this.templates = templates;
+            const grid = document.getElementById('mailing-templates');
+            grid.innerHTML = templates.map((tpl) => `
+              <button type="button" class="template-card ${this.selectedTemplateId === tpl.id ? 'active' : ''}" data-template-id="${escapeHtml(tpl.id)}">
+                <strong>${escapeHtml(tpl.name || tpl.id)}</strong>
+                <span>${escapeHtml(tpl.subject || '')}</span>
+              </button>
+            `).join('');
+            if (!this.selectedTemplateId && templates[0]) {
+              this.selectTemplate(templates[0].id);
+            } else if (this.selectedTemplateId) {
+              this.selectTemplate(this.selectedTemplateId);
+            }
+          } catch (error) {
+            document.getElementById('mailing-templates').innerHTML =
+              `<p class="upload-hint">${escapeHtml(error.message)}</p>`;
+          }
+        }
+
+        selectTemplate(id) {
+          this.selectedTemplateId = id;
+          const tpl = (this.templates || []).find((item) => item.id === id);
+          if (!tpl) return;
+          document.querySelectorAll('#mailing-templates .template-card').forEach((card) => {
+            card.classList.toggle('active', card.dataset.templateId === id);
+          });
+          document.getElementById('mailing-subject').value = tpl.subject || '';
+          document.getElementById('mailing-body').value = tpl.body || '';
+        }
+
+        async saveCurrentTemplate() {
+          if (!this.selectedTemplateId) return;
+          try {
+            const tpl = (this.templates || []).find((item) => item.id === this.selectedTemplateId);
+            await this.agentPost('/mailing/templates/save', {
+              id: this.selectedTemplateId,
+              name: tpl?.name || 'Template',
+              subject: document.getElementById('mailing-subject').value,
+              body: document.getElementById('mailing-body').value,
+            });
+            await this.loadTemplates();
+            alert('Template saved.');
+          } catch (error) {
+            this.showError(`Template save failed: ${error.message}`);
+          }
+        }
+
+        async prepareMailing() {
+          const tableId = document.getElementById('mailing-table').value;
+          if (!tableId) {
+            alert('Select a table first');
+            return;
+          }
+          try {
+            const table = (await this.agentPost('/tables/get', { id: tableId })).record;
+            if (!table) throw new Error('Table not found');
+            this.currentTable = table;
+            const result = await this.agentPost('/mailing/prepare', {
+              tableId: table.id,
+              tableName: table.name,
+              runId: table.run_id,
+              segment: document.getElementById('mailing-segment').value,
+              templateId: this.selectedTemplateId,
+              subject: document.getElementById('mailing-subject').value,
+              body: document.getElementById('mailing-body').value,
+              frequency: document.getElementById('mailing-frequency').value,
+              scheduleAt: document.getElementById('mailing-schedule').value
+                ? new Date(document.getElementById('mailing-schedule').value).toISOString()
+                : new Date().toISOString(),
+              baseUrl: window.location.href.split('?')[0],
+            });
+            document.getElementById('mailing-prepare-note').textContent =
+              `Prepared ${result.recipientCount || 0} messages. Links expire ${result.expiresAt ? new Date(result.expiresAt).toLocaleString() : 'in 3 days'}. Not sent — stored for a future email provider.`;
+            const messages = result.messages || [];
+            document.getElementById('mailing-prepared').innerHTML = messages.length
+              ? messages.slice(0, 40).map((msg) => `
+                  <div class="prepared-item">
+                    <strong>${escapeHtml(msg.email || msg.person_id || '')}</strong>
+                    <div class="upload-hint">${escapeHtml(msg.subject || '')}</div>
+                    <code class="link-code">${escapeHtml(msg.update_link || '')}</code>
+                  </div>
+                `).join('') + (messages.length > 40 ? `<p class="upload-hint">Showing 40 of ${messages.length}.</p>` : '')
+              : '<p class="upload-hint">No recipients in this segment.</p>';
+          } catch (error) {
+            this.showError(`Prepare failed: ${error.message}`);
+          }
+        }
+
+        async loadPendingUpdates(targetId) {
+          const el = document.getElementById(targetId);
+          if (!el) return;
+          try {
+            const result = await this.agentPost('/mailing/pending', {
+              tableId: this.currentTable?.id,
+              runId: this.currentTable?.run_id,
+              status: 'pending',
+            });
+            const records = result.records || [];
+            if (!records.length) {
+              el.innerHTML = '<p class="upload-hint">No pending candidate replies.</p>';
+              return;
+            }
+            el.innerHTML = records.map((item) => {
+              const proposed = item.proposed_fields || {};
+              const changes = Object.entries(proposed)
+                .filter(([, value]) => String(value || '').trim())
+                .slice(0, 8)
+                .map(([key, value]) => `${key}: ${value}`)
+                .join(' · ');
+              return `
+                <div class="pending-item">
+                  <div>
+                    <strong>${escapeHtml(item.action === 'opt_out' ? 'Opt-out' : 'Update')} · ${escapeHtml(item.person_id || '')}</strong>
+                    <div class="upload-hint">${escapeHtml(changes || 'No field changes')} · ${escapeHtml(item.created_at ? new Date(item.created_at).toLocaleString() : '')}</div>
+                  </div>
+                  <div class="row-actions">
+                    <button class="action-btn" data-pending-action="approve" data-pending-id="${escapeHtml(item.id)}">Approve</button>
+                    <button class="action-btn danger" data-pending-action="reject" data-pending-id="${escapeHtml(item.id)}">Reject</button>
+                  </div>
+                </div>
+              `;
+            }).join('');
+          } catch (error) {
+            el.innerHTML = `<p class="upload-hint">${escapeHtml(error.message)}</p>`;
+          }
+        }
+
+        async reviewPending(id, decision) {
+          if (!id || !decision) return;
+          if (!confirm(`${decision === 'approve' ? 'Approve' : 'Reject'} this candidate request?`)) return;
+          try {
+            await this.agentPost('/mailing/pending/review', { id, decision });
+            await this.loadPendingUpdates('mailing-pending');
+            await this.loadPendingUpdates('pending-list');
+            if (this.currentView === 'workspace') await this.loadPeople();
+          } catch (error) {
+            this.showError(`Review failed: ${error.message}`);
+          }
+        }
+
+        async loadCandidatePortal() {
+          if (!this.candidateToken) return;
+          const status = document.getElementById('candidate-status');
+          const actions = document.getElementById('candidate-actions');
+          try {
+            const result = await this.agentPost('/candidate/token', { token: this.candidateToken });
+            if (!result.valid) {
+              status.textContent = result.error || 'This link is no longer available.';
+              actions.style.display = 'none';
+              document.getElementById('candidate-fields').innerHTML = '';
+              return;
+            }
+            status.textContent = `Link valid until ${result.token?.expires_at ? new Date(result.token.expires_at).toLocaleString() : '3 days from issue'}.`;
+            this.renderFieldInputs('candidate-fields', result.person || {}, 'cand');
+            actions.style.display = 'flex';
+          } catch (error) {
+            status.textContent = error.message;
+            actions.style.display = 'none';
+          }
+        }
+
+        async submitCandidate(action) {
+          if (!this.candidateToken) return;
+          if (action === 'opt_out' && !confirm('Request removal from the Blue Hope talent database?')) return;
+          try {
+            const result = await this.agentPost('/candidate/submit', {
+              token: this.candidateToken,
+              action,
+              fields: action === 'update' ? this.readFieldInputs('cand') : {},
+            });
+            document.getElementById('candidate-status').textContent = result.message || 'Submitted.';
+            document.getElementById('candidate-actions').style.display = 'none';
+            document.getElementById('candidate-fields').innerHTML = '';
+          } catch (error) {
+            document.getElementById('candidate-status').textContent = error.message;
+          }
         }
 
         async refreshMailingCount() {
@@ -1392,7 +1790,7 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
               review: 'people still needing review',
               employment: 'rows matching unknown employment (approximate until that field is filled)',
             };
-            label.textContent = `${result.count || 0} ${names[segment] || 'people'} in “${table.name}”. Sending is not enabled yet.`;
+            label.textContent = `${result.count || 0} ${names[segment] || 'people'} in “${table.name}”. Prepare campaign to create 3-day links.`;
           } catch (error) {
             label.textContent = error.message;
           }
@@ -1529,7 +1927,11 @@ If a tool fails, answer from this guide. Do not invent employment_status.`;
         }
 
         showError(message) {
-          this.addChatMessage('assistant', message);
+          if (this.currentView === 'workspace') {
+            this.addChatMessage('assistant', message);
+          } else {
+            alert(message);
+          }
         }
       }
 

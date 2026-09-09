@@ -8,6 +8,10 @@ export const COLLECTIONS = {
   reviewActions: 'bh-talent-review-actions',
   tables: 'bh-talent-tables',
   consents: 'bh-talent-consents',
+  mailingTemplates: 'bh-talent-mailing-templates',
+  mailingCampaigns: 'bh-talent-mailing-campaigns',
+  mailingTokens: 'bh-talent-mailing-tokens',
+  pendingUpdates: 'bh-talent-pending-updates',
 } as const;
 
 export const TYPES = {
@@ -17,6 +21,10 @@ export const TYPES = {
   reviewAction: 'review-action',
   table: 'table',
   consent: 'consent',
+  mailingTemplate: 'mailing-template',
+  mailingCampaign: 'mailing-campaign',
+  mailingToken: 'mailing-token',
+  pendingUpdate: 'pending-update',
 } as const;
 
 export const LATEST_RUN_ID = 'latest';
