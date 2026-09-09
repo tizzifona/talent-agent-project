@@ -7,12 +7,15 @@ import { normalizeRecord } from './normalize.ts';
 import { memoryAvailable } from './memory.ts';
 import { listConsents } from './consent-store.ts';
 import {
+  createPerson,
   exportPersonRows,
   getPerson,
   loadDashboardState,
   persistMatchingResults,
   queryInternal,
   queryPersons,
+  softDeletePerson,
+  updatePerson,
 } from './person-store.ts';
 import {
   confirmPerson,
@@ -26,20 +29,21 @@ import {
   listTables,
   renameTable,
 } from './table-store.ts';
+import {
+  getTokenPayload,
+  listCampaigns,
+  listPendingUpdates,
+  listTemplates,
+  prepareCampaign,
+  reviewPendingUpdate,
+  saveTemplate,
+  submitTokenResponse,
+} from './mailing-store.ts';
 
 const systemPrompt = `You are the on-screen assistant for Blue Hope Talent Agent.
-The product has three stages:
-1. Upload and deduplicate CSV or Excel files into one person per contact (email, then phone, then a cautious name check; uncertain rows go to review).
-2. Saved tables: preview people, rename, export CSV or Excel, review, or delete from the library.
-3. Mailing settings: choose a table and a segment. Sending is not enabled yet.
-
-Answer how-to and product questions from this description. Do not call index_search, index_resolve, or structured_get for those questions.
-Only query structured memory collections bh-talent-persons, bh-talent-tables, bh-talent-internal, bh-talent-runs, and bh-talent-review-actions when the user asks about people or saved tables.
-Never call index_resolve without a key returned by index_search.
-If a tool fails, answer from this guide instead of repeating the platform error.
-Do not invent employment status. Empty employment_status is a verification segment, not a guess.
-The unified table follows the consolidation spec: candidate_id, source_database (BD1-BD7), name, demographics and location, contact details, legal status and work permission, languages and education, professional experience and skills.
-Consents (privacy_policy_accepted, data_processing_consent, future_contact_consent) live in bh-talent-consents as separate fields. refugee_status is sensitive and is excluded from exports by default.`;
+Help operators work with a saved talent table: search people, explain fields, review uncertain rows, and prepare mailing.
+You appear on the working-table page for quick candidate lookup by criteria the operator configures.
+Do not invent employment status. Consents live separately. refugee_status is sensitive.`;
 
 const agent = new GenerativeChatAgent({
   targetScope: 'chat useTools read_memory write_memory',
@@ -213,6 +217,31 @@ Deno.serve({ port: 0 }, async (request) => {
       return response({ ok: { record: await getPerson(body.id) } });
     }
 
+    if (url.pathname.endsWith('/persons/create') && request.method === 'POST') {
+      const body = await request.json();
+      return response({ ok: { record: await createPerson(body || {}) } });
+    }
+
+    if (url.pathname.endsWith('/persons/update') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'Person id required' });
+      return response({ ok: { record: await updatePerson(String(body.id), body.fields || body) } });
+    }
+
+    if (url.pathname.endsWith('/persons/delete') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'Person id required' });
+      return response({
+        ok: {
+          record: await softDeletePerson(
+            String(body.id),
+            actorFrom(request),
+            String(body.note || ''),
+          ),
+        },
+      });
+    }
+
     if (url.pathname.endsWith('/persons/export') && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       return response({ ok: { records: await exportPersonRows(body?.runId) } });
@@ -261,6 +290,65 @@ Deno.serve({ port: 0 }, async (request) => {
       if (!body?.id) return response({ error: 'Table id required' });
       await deleteTable(String(body.id));
       return response({ ok: { deleted: true } });
+    }
+
+    if (url.pathname.endsWith('/mailing/templates') && request.method === 'POST') {
+      return response({ ok: { records: await listTemplates() } });
+    }
+
+    if (url.pathname.endsWith('/mailing/templates/save') && request.method === 'POST') {
+      const body = await request.json();
+      return response({ ok: { record: await saveTemplate(body || {}) } });
+    }
+
+    if (url.pathname.endsWith('/mailing/prepare') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.runId || !body?.tableId) return response({ error: 'tableId and runId required' });
+      return response({ ok: await prepareCampaign(body) });
+    }
+
+    if (url.pathname.endsWith('/mailing/campaigns') && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      return response({ ok: { records: await listCampaigns(body?.tableId) } });
+    }
+
+    if (url.pathname.endsWith('/mailing/pending') && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      return response({ ok: { records: await listPendingUpdates(body || {}) } });
+    }
+
+    if (url.pathname.endsWith('/mailing/pending/review') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'Pending id required' });
+      const decision = String(body.decision || '');
+      if (decision !== 'approve' && decision !== 'reject') {
+        return response({ error: 'decision must be approve or reject' });
+      }
+      return response({
+        ok: await reviewPendingUpdate(String(body.id), decision, actorFrom(request)),
+      });
+    }
+
+    if (url.pathname.endsWith('/candidate/token') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.token) return response({ error: 'token required' });
+      return response({ ok: await getTokenPayload(String(body.token)) });
+    }
+
+    if (url.pathname.endsWith('/candidate/submit') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.token) return response({ error: 'token required' });
+      const action = String(body.action || 'update');
+      if (action !== 'update' && action !== 'opt_out') {
+        return response({ error: 'action must be update or opt_out' });
+      }
+      return response({
+        ok: await submitTokenResponse({
+          token: String(body.token),
+          action,
+          fields: body.fields || {},
+        }),
+      });
     }
   } catch (error) {
     console.error('Agent route error:', error);

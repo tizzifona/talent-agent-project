@@ -570,3 +570,175 @@ export async function queryInternal(runId?: string): Promise<JsonMap[]> {
   });
   return result.records.map(unwrapObject);
 }
+
+const MUTABLE_FIELDS = [
+  'first_name',
+  'last_names',
+  'primary_email',
+  'secondary_email',
+  'phone_number',
+  'preferred_contact_method',
+  'linkedin_url',
+  'gender',
+  'age',
+  'country_of_origin',
+  'country_of_residence',
+  'city_of_residence',
+  'legal_status',
+  'refugee_status',
+  'work_permission',
+  'languages',
+  'english_level',
+  'highest_education_level',
+  'field_of_study',
+  'courses_and_certifications',
+  'work_experience_summary',
+  'job_title',
+  'years_of_experience',
+  'years_of_tech_experience',
+  'has_tech_experience',
+  'github_url',
+  'technical_skills',
+  'key_skills',
+  'employment_status',
+  'skill_tags',
+];
+
+function rebuildSearchText(person: JsonMap): string {
+  return [
+    person.full_name,
+    person.first_name,
+    person.last_names,
+    person.primary_email,
+    person.phone_number,
+    person.country,
+    person.city_of_residence,
+    person.languages,
+    person.technical_skills,
+    person.key_skills,
+    person.skill_tags,
+    person.job_title,
+    person.seniority,
+    person.candidate_id,
+    person.person_id,
+    person.id,
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function asStoredObject(person: JsonMap): JsonMap {
+  const { id: _id, ...object } = person;
+  return object;
+}
+
+export async function createPerson(input: JsonMap & { run_id: string }): Promise<JsonMap> {
+  const runId = String(input.run_id || '');
+  if (!runId) throw new Error('run_id is required');
+  const now = Date.now();
+  const stableId = `p-manual-${now}-${Math.random().toString(36).slice(2, 8)}`;
+  const first = String(input.first_name || '').trim();
+  const last = String(input.last_names || '').trim();
+  const fullName = String(input.full_name || [first, last].filter(Boolean).join(' ')).trim();
+  const object: JsonMap = {
+    candidate_id: candidateIdFrom(stableId),
+    source_database: 'MANUAL',
+    person_id: stableId,
+    first_name: first,
+    last_names: last,
+    full_name: fullName,
+    primary_email: String(input.primary_email || '').trim(),
+    secondary_email: String(input.secondary_email || '').trim(),
+    phone_number: String(input.phone_number || '').trim(),
+    preferred_contact_method: String(input.preferred_contact_method || ''),
+    linkedin_url: String(input.linkedin_url || ''),
+    gender: String(input.gender || ''),
+    age: String(input.age || ''),
+    country_of_origin: String(input.country_of_origin || ''),
+    country_of_residence: String(input.country_of_residence || ''),
+    city_of_residence: String(input.city_of_residence || ''),
+    country: String(input.country_of_residence || input.country || ''),
+    legal_status: String(input.legal_status || ''),
+    refugee_status: String(input.refugee_status || ''),
+    work_permission: String(input.work_permission || ''),
+    languages: String(input.languages || ''),
+    english_level: String(input.english_level || ''),
+    highest_education_level: String(input.highest_education_level || ''),
+    field_of_study: String(input.field_of_study || ''),
+    courses_and_certifications: String(input.courses_and_certifications || ''),
+    work_experience_summary: String(input.work_experience_summary || ''),
+    job_title: String(input.job_title || ''),
+    years_of_experience: String(input.years_of_experience || ''),
+    years_of_tech_experience: String(input.years_of_tech_experience || ''),
+    has_tech_experience: String(input.has_tech_experience || ''),
+    github_url: String(input.github_url || ''),
+    technical_skills: String(input.technical_skills || ''),
+    key_skills: String(input.key_skills || ''),
+    skill_tags: String(input.skill_tags || ''),
+    employment_status: String(input.employment_status || ''),
+    match_type: 'manual',
+    match_confidence: 'high',
+    confidence_pct: 100,
+    needs_review: false,
+    review_reason: '',
+    held_out: false,
+    opted_out: false,
+    record_count: 1,
+    readiness_score: '',
+    seniority: '',
+    all_emails: String(input.primary_email || ''),
+    all_phones: String(input.phone_number || ''),
+    provenance_text: 'manual entry',
+    field_provenance: {},
+    sources: [{
+      source_file: 'manual',
+      source_database: 'MANUAL',
+      source_row_id: '0',
+      email: String(input.primary_email || ''),
+      phone: String(input.phone_number || ''),
+      name: fullName,
+    }],
+    run_id: runId,
+    review_status: 'confirmed',
+    suggested_merge_id: '',
+    merged_into: '',
+    merged_from: '',
+    created_manually_at: new Date().toISOString(),
+  };
+  object.search_text = rebuildSearchText({ id: stableId, ...object });
+  await structuredWrite(COLLECTIONS.persons, TYPES.person, [{ id: stableId, object }]);
+  return { id: stableId, ...object };
+}
+
+export async function updatePerson(id: string, fields: JsonMap): Promise<JsonMap> {
+  const person = await getPerson(id);
+  if (!person) throw new Error('Person not found');
+  const next = asStoredObject(person);
+  for (const key of MUTABLE_FIELDS) {
+    if (key in fields) next[key] = String(fields[key] ?? '');
+  }
+  const first = String(next.first_name || '');
+  const last = String(next.last_names || '');
+  next.full_name = String(fields.full_name || [first, last].filter(Boolean).join(' ') || next.full_name || '');
+  next.country = String(next.country_of_residence || next.country || '');
+  next.updated_at = new Date().toISOString();
+  next.search_text = rebuildSearchText({ id, ...next });
+  await structuredWrite(COLLECTIONS.persons, TYPES.person, [{ id, object: next }]);
+  return { id, ...next };
+}
+
+export async function softDeletePerson(id: string, actor = 'admin', note = ''): Promise<JsonMap> {
+  const person = await getPerson(id);
+  if (!person) throw new Error('Person not found');
+  const next = {
+    ...asStoredObject(person),
+    held_out: true,
+    opted_out: true,
+    needs_review: false,
+    review_status: 'opted_out',
+    review_decided_by: actor,
+    review_decided_at: new Date().toISOString(),
+    review_reason: note || 'Removed from working table',
+  };
+  next.search_text = rebuildSearchText({ id, ...next });
+  await structuredWrite(COLLECTIONS.persons, TYPES.person, [{ id, object: next }]);
+  return { id, ...next };
+}
