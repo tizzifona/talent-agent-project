@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=6">
+    <link rel="stylesheet" href="app.css?v=7">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -154,54 +154,41 @@
             <button data-panel="review">Review</button>
             <button data-panel="approvals">Pending updates</button>
           </div>
+          <div id="workspace-filters" class="card filters-card">
+            <div class="filters-bar">
+              <div>
+                <label for="people-search">Search</label>
+                <input id="people-search" type="text" placeholder="Name, email, phone">
+              </div>
+              <div>
+                <label for="people-country">Country</label>
+                <input id="people-country" type="text" placeholder="Contains">
+              </div>
+              <div>
+                <label for="people-skills">Skills</label>
+                <input id="people-skills" type="text" placeholder="Contains">
+              </div>
+              <div class="filter-actions">
+                <button id="people-apply-btn" class="primary-btn">Apply</button>
+                <button id="people-reset-btn" class="secondary-btn">Reset</button>
+                <button id="people-add-btn" class="primary-btn">Add candidate</button>
+              </div>
+            </div>
+          </div>
           <div id="panel-people">
             <section class="card">
-              <div class="filters-bar">
-                <div>
-                  <label for="people-search">Search</label>
-                  <input id="people-search" type="text" placeholder="Name, email, phone, skills">
-                </div>
-                <div>
-                  <label for="people-country">Country</label>
-                  <input id="people-country" type="text" placeholder="Contains">
-                </div>
-                <div>
-                  <label for="people-confidence">Confidence</label>
-                  <select id="people-confidence">
-                    <option value="">All</option>
-                    <option value="high">high</option>
-                    <option value="medium">medium</option>
-                    <option value="medium-auto">medium-auto</option>
-                    <option value="low">low</option>
-                  </select>
-                </div>
-                <div>
-                  <label for="people-review">Review</label>
-                  <select id="people-review">
-                    <option value="">All</option>
-                    <option value="yes">Needs review</option>
-                    <option value="no">Clean</option>
-                  </select>
-                </div>
-                <div class="filter-actions">
-                  <button id="people-apply-btn" class="primary-btn">Apply</button>
-                  <button id="people-reset-btn" class="secondary-btn">Reset</button>
-                  <button id="people-add-btn" class="primary-btn">Add candidate</button>
-                </div>
-              </div>
               <div class="people-meta">
                 <span id="people-count">0 people</span>
                 <span id="people-page-label"></span>
+                <div class="column-controls">
+                  <button id="people-cols-more" class="secondary-btn" type="button">Show next 5 columns</button>
+                  <button id="people-cols-less" class="secondary-btn" type="button" disabled>Hide last 5</button>
+                </div>
               </div>
               <div id="people-empty" class="empty-state">No people in this table yet.</div>
-              <div id="people-table-wrap" style="display: none; overflow-x: auto;">
-                <table class="report-table" id="people-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th><th>Email</th><th>Phone</th><th>Country</th>
-                      <th>Skills</th><th>Match</th><th>Confidence</th><th>Review</th><th>Actions</th>
-                    </tr>
-                  </thead>
+              <div id="people-table-wrap" class="table-scroll" style="display: none;">
+                <table class="report-table column-table" id="people-table">
+                  <thead id="people-head"></thead>
                   <tbody id="people-body"></tbody>
                 </table>
               </div>
@@ -221,9 +208,21 @@
           </div>
           <div id="panel-review" class="hidden">
             <section class="card">
-              <h2>Manual review</h2>
-              <p class="upload-hint">Confirm keeps the person. Reject holds them out. Merge folds them into another person.</p>
-              <div id="review-queue"></div>
+              <p class="upload-hint">Edit or delete a candidate, or complete review to move them into the main People list.</p>
+              <div class="people-meta">
+                <span id="review-count">0 in review</span>
+                <div class="column-controls">
+                  <button id="review-cols-more" class="secondary-btn" type="button">Show next 5 columns</button>
+                  <button id="review-cols-less" class="secondary-btn" type="button" disabled>Hide last 5</button>
+                </div>
+              </div>
+              <div id="review-empty" class="empty-state">No rows currently need review.</div>
+              <div id="review-table-wrap" class="table-scroll" style="display: none;">
+                <table class="report-table column-table" id="review-table">
+                  <thead id="review-head"></thead>
+                  <tbody id="review-body"></tbody>
+                </table>
+              </div>
             </section>
             <section class="card" id="internal-section" style="display: none;">
               <h2>Internal / staff accounts</h2>
@@ -387,7 +386,26 @@
         from 'https://webdaemon.online/latest/static/lib/dist/index.js';
 
       const PAGE_SIZE = 25;
+      const COLUMN_PAGE = 5;
       const DECLARED_PREFIX = 'talent/v3';
+      const TABLE_COLUMNS = [
+        { id: 'name', label: 'Name' },
+        { id: 'email', label: 'Email' },
+        { id: 'phone', label: 'Phone' },
+        { id: 'country', label: 'Country' },
+        { id: 'skills', label: 'Skills' },
+        { id: 'match', label: 'Match' },
+        { id: 'confidence', label: 'Confidence' },
+        { id: 'job_title', label: 'Job title' },
+        { id: 'languages', label: 'Languages' },
+        { id: 'experience', label: 'Experience' },
+        { id: 'linkedin', label: 'LinkedIn' },
+        { id: 'github', label: 'GitHub' },
+        { id: 'education', label: 'Education' },
+        { id: 'employment', label: 'Employment' },
+        { id: 'review_reason', label: 'Review reason' },
+      ];
+      const ACTION_COLUMN = { id: 'actions', label: 'Actions' };
       const EDITABLE_FIELDS = [
         'first_name', 'last_names', 'primary_email', 'secondary_email', 'phone_number',
         'preferred_contact_method', 'linkedin_url', 'gender', 'age', 'country_of_origin',
@@ -481,6 +499,9 @@ Do not invent employment_status. refugee_status is sensitive.`;
           this.editingPersonId = null;
           this.selectedTemplateId = '';
           this.candidateToken = '';
+          this.workspacePanel = 'people';
+          this.peopleColGroups = 1;
+          this.reviewColGroups = 1;
           this.MAX_FILES = 10;
         }
 
@@ -606,6 +627,10 @@ Do not invent employment_status. refugee_status is sensitive.`;
             if (e.target.id === 'edit-modal') this.closeEditModal();
           });
           document.getElementById('people-add-btn').addEventListener('click', () => this.openPersonEditor(null));
+          document.getElementById('people-cols-more').addEventListener('click', () => this.changeColumnGroups('people', 1));
+          document.getElementById('people-cols-less').addEventListener('click', () => this.changeColumnGroups('people', -1));
+          document.getElementById('review-cols-more').addEventListener('click', () => this.changeColumnGroups('review', 1));
+          document.getElementById('review-cols-less').addEventListener('click', () => this.changeColumnGroups('review', -1));
           document.getElementById('candidate-submit-btn').addEventListener('click', () => this.submitCandidate('update'));
           document.getElementById('candidate-optout-btn').addEventListener('click', () => this.submitCandidate('opt_out'));
           document.getElementById('chat-input').addEventListener('keypress', (e) => {
@@ -613,20 +638,31 @@ Do not invent employment_status. refugee_status is sensitive.`;
           });
           document.getElementById('people-apply-btn').addEventListener('click', () => {
             this.people.offset = 0;
-            this.loadPeople();
+            this.reloadWorkspaceList();
           });
           document.getElementById('people-reset-btn').addEventListener('click', () => {
             document.getElementById('people-search').value = '';
             document.getElementById('people-country').value = '';
-            document.getElementById('people-confidence').value = '';
-            document.getElementById('people-review').value = '';
+            document.getElementById('people-skills').value = '';
             this.people.offset = 0;
-            this.loadPeople();
+            this.reloadWorkspaceList();
           });
           document.getElementById('people-search').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
               this.people.offset = 0;
-              this.loadPeople();
+              this.reloadWorkspaceList();
+            }
+          });
+          document.getElementById('people-country').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+              this.people.offset = 0;
+              this.reloadWorkspaceList();
+            }
+          });
+          document.getElementById('people-skills').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+              this.people.offset = 0;
+              this.reloadWorkspaceList();
             }
           });
           document.getElementById('people-prev-btn').addEventListener('click', () => {
@@ -655,7 +691,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
             }
             openPerson(event);
           });
-          document.getElementById('review-queue').addEventListener('click', (event) => {
+          document.getElementById('review-body').addEventListener('click', (event) => {
             const actionBtn = event.target.closest('[data-review-action]');
             if (actionBtn) {
               this.handleReviewAction(
@@ -663,6 +699,11 @@ Do not invent employment_status. refugee_status is sensitive.`;
                 actionBtn.dataset.reviewAction,
                 actionBtn.dataset.targetId,
               );
+              return;
+            }
+            const personBtn = event.target.closest('[data-person-action]');
+            if (personBtn) {
+              this.handlePersonAction(personBtn.dataset.personId, personBtn.dataset.personAction);
               return;
             }
             openPerson(event);
@@ -735,15 +776,118 @@ Do not invent employment_status. refugee_status is sensitive.`;
         }
 
         showWorkspacePanel(panel) {
+          this.workspacePanel = panel;
           document.querySelectorAll('#workspace-subnav button').forEach((button) => {
             button.classList.toggle('active', button.dataset.panel === panel);
           });
           document.getElementById('panel-people').classList.toggle('hidden', panel !== 'people');
           document.getElementById('panel-review').classList.toggle('hidden', panel !== 'review');
           document.getElementById('panel-approvals').classList.toggle('hidden', panel !== 'approvals');
+          document.getElementById('workspace-filters').classList.toggle('hidden', panel === 'approvals');
+          document.getElementById('people-add-btn').style.display = panel === 'people' ? '' : 'none';
           if (panel === 'review') this.loadReview();
           if (panel === 'people') this.loadPeople();
           if (panel === 'approvals') this.loadPendingUpdates('pending-list');
+        }
+
+        reloadWorkspaceList() {
+          if (this.workspacePanel === 'review') this.loadReview();
+          else this.loadPeople();
+        }
+
+        maxColumnGroups() {
+          return Math.ceil(TABLE_COLUMNS.length / COLUMN_PAGE);
+        }
+
+        visibleColumns(groups) {
+          return [...TABLE_COLUMNS.slice(0, groups * COLUMN_PAGE), ACTION_COLUMN];
+        }
+
+        changeColumnGroups(mode, delta) {
+          const key = mode === 'review' ? 'reviewColGroups' : 'peopleColGroups';
+          const next = Math.min(this.maxColumnGroups(), Math.max(1, this[key] + delta));
+          this[key] = next;
+          this.updateColumnButtons(mode);
+          if (mode === 'review') this.renderPersonTable(this.reviewRecords || [], 'review', true);
+          else this.renderPersonTable(this.people.records || [], 'people', false);
+        }
+
+        updateColumnButtons(mode) {
+          const groups = mode === 'review' ? this.reviewColGroups : this.peopleColGroups;
+          const more = document.getElementById(`${mode}-cols-more`);
+          const less = document.getElementById(`${mode}-cols-less`);
+          if (more) more.disabled = groups >= this.maxColumnGroups();
+          if (less) less.disabled = groups <= 1;
+        }
+
+        cellValue(person, columnId, reviewMode) {
+          const name = person.full_name || [person.first_name, person.last_names].filter(Boolean).join(' ') || '-';
+          const skillSource = person.technical_skills || person.key_skills || person.skill_tags || '';
+          const skills = String(skillSource).split(' | ').filter(Boolean).slice(0, 6).join(', ') || '-';
+          switch (columnId) {
+            case 'name':
+              return `<button class="person-link" data-person-id="${escapeHtml(person.id)}">${escapeHtml(name)}</button>`;
+            case 'email':
+              return escapeHtml(person.primary_email || '-');
+            case 'phone':
+              return escapeHtml(person.phone_number || '-');
+            case 'country':
+              return escapeHtml(person.country_of_residence || person.country || '-');
+            case 'skills':
+              return escapeHtml(skills);
+            case 'match':
+              return `<span class="match-badge ${escapeHtml(person.match_type || '')}">${escapeHtml(person.match_type || '-')}</span>`;
+            case 'confidence':
+              return escapeHtml(person.match_confidence || '-');
+            case 'job_title':
+              return escapeHtml(person.job_title || '-');
+            case 'languages':
+              return escapeHtml(person.languages || '-');
+            case 'experience':
+              return escapeHtml(person.years_of_experience || person.work_experience_summary || '-');
+            case 'linkedin':
+              return escapeHtml(person.linkedin_url || '-');
+            case 'github':
+              return escapeHtml(person.github_url || '-');
+            case 'education':
+              return escapeHtml(person.highest_education_level || '-');
+            case 'employment':
+              return escapeHtml(person.employment_status || 'unknown');
+            case 'review_reason':
+              return escapeHtml(person.review_reason || (person.needs_review ? 'Needs review' : '-'));
+            case 'actions':
+              return reviewMode ? this.reviewRowActions(person) : `
+                <div class="row-actions">
+                  <button class="action-btn" data-person-action="edit" data-person-id="${escapeHtml(person.id)}">Edit</button>
+                  <button class="action-btn danger" data-person-action="delete" data-person-id="${escapeHtml(person.id)}">Delete</button>
+                </div>`;
+            default:
+              return '-';
+          }
+        }
+
+        reviewRowActions(person) {
+          return `
+            <div class="row-actions">
+              <button class="action-btn" data-person-action="edit" data-person-id="${escapeHtml(person.id)}">Edit</button>
+              <button class="action-btn danger" data-person-action="delete" data-person-id="${escapeHtml(person.id)}">Delete</button>
+              <button class="action-btn" data-review-action="confirm" data-person-id="${escapeHtml(person.id)}">Complete review</button>
+            </div>
+          `;
+        }
+
+        renderPersonTable(records, mode, reviewMode) {
+          const groups = mode === 'review' ? this.reviewColGroups : this.peopleColGroups;
+          const columns = this.visibleColumns(groups);
+          const head = document.getElementById(`${mode}-head`);
+          const body = document.getElementById(`${mode}-body`);
+          head.innerHTML = `<tr>${columns.map((col) => `<th>${escapeHtml(col.label)}</th>`).join('')}</tr>`;
+          body.innerHTML = records.map((person) => `
+            <tr class="${person.needs_review ? 'needs-review-row' : ''}">
+              ${columns.map((col) => `<td>${this.cellValue(person, col.id, reviewMode)}</td>`).join('')}
+            </tr>
+          `).join('');
+          this.updateColumnButtons(mode);
         }
 
         async detectAgentPrefix() {
@@ -786,17 +930,16 @@ Do not invent employment_status. refugee_status is sensitive.`;
           return result.ok;
         }
 
-        currentFilters() {
-          const review = document.getElementById('people-review').value;
+        currentFilters(extra = {}) {
           return {
             runId: this.currentTable?.run_id,
             search: document.getElementById('people-search').value.trim(),
             country: document.getElementById('people-country').value.trim(),
-            matchConfidence: document.getElementById('people-confidence').value,
-            needsReview: review === '' ? undefined : review === 'yes',
+            skills: document.getElementById('people-skills').value.trim(),
             heldOut: false,
             limit: PAGE_SIZE,
             offset: this.people.offset,
+            ...extra,
           };
         }
 
@@ -835,54 +978,16 @@ Do not invent employment_status. refugee_status is sensitive.`;
 
         reviewActions(person) {
           if (!person.needs_review) return '';
-          const suggested = person.suggested_merge_id
-            ? ` data-target-id="${escapeHtml(person.suggested_merge_id)}"`
-            : '';
-          return `
-            <div class="row-actions">
-              <button class="action-btn" data-review-action="confirm" data-person-id="${escapeHtml(person.id)}">Confirm</button>
-              <button class="action-btn danger" data-review-action="reject" data-person-id="${escapeHtml(person.id)}">Reject</button>
-              <button class="action-btn" data-review-action="open-merge" data-person-id="${escapeHtml(person.id)}"${suggested}>Merge</button>
-            </div>
-          `;
-        }
-
-        renderPeopleRows(records, bodyId, includeReviewReason = false) {
-          const body = document.getElementById(bodyId);
-          body.innerHTML = records.map((person) => {
-            const name = person.full_name || [person.first_name, person.last_names].filter(Boolean).join(' ') || '-';
-            const skillSource = person.technical_skills || person.key_skills || person.skill_tags || '';
-            const skills = String(skillSource).split(' | ').filter(Boolean).slice(0, 4).join(', ') || '-';
-            const review = person.needs_review
-              ? `<span class="match-badge manual-review" title="${escapeHtml(person.review_reason || '')}">Review</span>`
-              : '';
-            const extra = includeReviewReason
-              ? `<td>${escapeHtml(person.review_reason || '')}</td><td>${this.reviewActions(person)}</td>`
-              : `<td>
-                  <div class="row-actions">
-                    <button class="action-btn" data-person-action="edit" data-person-id="${escapeHtml(person.id)}">Edit</button>
-                    <button class="action-btn danger" data-person-action="delete" data-person-id="${escapeHtml(person.id)}">Delete</button>
-                  </div>
-                </td>`;
-            return `
-              <tr class="${person.needs_review ? 'needs-review-row' : ''}">
-                <td><button class="person-link" data-person-id="${escapeHtml(person.id)}">${escapeHtml(name)}</button></td>
-                <td>${escapeHtml(person.primary_email || '-')}</td>
-                <td>${escapeHtml(person.phone_number || '-')}</td>
-                <td>${escapeHtml(person.country_of_residence || person.country || '-')}</td>
-                <td>${escapeHtml(skills)}</td>
-                <td><span class="match-badge ${escapeHtml(person.match_type || '')}">${escapeHtml(person.match_type || '-')}</span></td>
-                <td>${escapeHtml(person.match_confidence || '')}</td>
-                <td>${review}</td>
-                ${extra}
-              </tr>
-            `;
-          }).join('');
+          return this.reviewRowActions(person);
         }
 
         async loadPeople() {
           try {
-            const result = await this.agentPost('/persons/query', this.currentFilters());
+            const result = await this.agentPost('/persons/query', this.currentFilters({
+              needsReview: false,
+              offset: this.people.offset,
+              limit: PAGE_SIZE,
+            }));
             this.people.records = result.records || [];
             this.people.count = result.count || 0;
             const empty = document.getElementById('people-empty');
@@ -893,7 +998,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
             } else {
               empty.style.display = 'none';
               wrap.style.display = 'block';
-              this.renderPeopleRows(this.people.records, 'people-body');
+              this.renderPersonTable(this.people.records, 'people', false);
             }
             const start = this.people.count === 0 ? 0 : this.people.offset + 1;
             const end = Math.min(this.people.offset + PAGE_SIZE, this.people.count);
@@ -911,29 +1016,22 @@ Do not invent employment_status. refugee_status is sensitive.`;
 
         async loadReview() {
           try {
-            const result = await this.agentPost('/persons/query', {
-              runId: this.currentTable?.run_id,
+            const result = await this.agentPost('/persons/query', this.currentFilters({
               needsReview: true,
-              limit: 100,
               offset: 0,
-            });
-            const records = result.records || [];
-            const queue = document.getElementById('review-queue');
-            if (records.length === 0) {
-              queue.innerHTML = '<p class="upload-hint">No rows currently need review.</p>';
+              limit: 100,
+            }));
+            this.reviewRecords = result.records || [];
+            const empty = document.getElementById('review-empty');
+            const wrap = document.getElementById('review-table-wrap');
+            document.getElementById('review-count').textContent = `${this.reviewRecords.length} in review`;
+            if (this.reviewRecords.length === 0) {
+              empty.style.display = 'block';
+              wrap.style.display = 'none';
             } else {
-              queue.innerHTML = `
-                <table class="report-table">
-                  <thead>
-                    <tr>
-                      <th>Name</th><th>Email</th><th>Phone</th><th>Country</th>
-                      <th>Skills</th><th>Match</th><th>Confidence</th><th>Review</th><th>Reason</th><th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="review-body"></tbody>
-                </table>
-              `;
-              this.renderPeopleRows(records, 'review-body', true);
+              empty.style.display = 'none';
+              wrap.style.display = 'block';
+              this.renderPersonTable(this.reviewRecords, 'review', true);
             }
 
             const internal = await this.agentPost('/internal/list', {
@@ -962,8 +1060,9 @@ Do not invent employment_status. refugee_status is sensitive.`;
               </table>
             `;
           } catch (error) {
-            document.getElementById('review-queue').innerHTML =
-              `<p class="upload-hint">${escapeHtml(error.message)}</p>`;
+            document.getElementById('review-empty').textContent = error.message;
+            document.getElementById('review-empty').style.display = 'block';
+            document.getElementById('review-table-wrap').style.display = 'none';
           }
         }
 
@@ -1199,7 +1298,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
               await this.openMergeModal(personId, targetId);
               return;
             }
-            if (action === 'confirm' && !confirm('Keep this person in the working table?')) return;
+            if (action === 'confirm' && !confirm('Complete review and move this person to the main list?')) return;
             if (action === 'reject' && !confirm('Hold this person out of the working table?')) return;
             if (action === 'merge') {
               if (!targetId) {
@@ -1213,10 +1312,10 @@ Do not invent employment_status. refugee_status is sensitive.`;
             this.closeModal();
             await this.refreshDashboard();
             await this.loadPeople();
-            if (document.getElementById('panel-review') && !document.getElementById('panel-review').classList.contains('hidden')) {
-              await this.loadReview();
-            }
-            this.addChatMessage('assistant', `Review ${action} saved for ${personId}.`);
+            if (this.workspacePanel === 'review') await this.loadReview();
+            this.addChatMessage('assistant', action === 'confirm'
+              ? `Review completed. ${personId} moved to the main list.`
+              : `Review ${action} saved for ${personId}.`);
           } catch (error) {
             this.showError(`Review failed: ${error.message}`);
           }
