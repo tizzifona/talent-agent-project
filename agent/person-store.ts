@@ -93,6 +93,7 @@ export interface PersonQuery {
   runId?: string;
   search?: string;
   country?: string;
+  skills?: string;
   matchConfidence?: string;
   needsReview?: boolean;
   heldOut?: boolean;
@@ -269,6 +270,10 @@ function buildFilter(query: PersonQuery): JsonMap {
   if (query.runId) filter.run_id = query.runId;
   if (query.search) filter.search_text = { contains: query.search };
   if (query.country) filter.country = { contains: query.country };
+  // Skills live in search_text (and technical_skills). Prefer search_text so
+  // key_skills / skill_tags also match.
+  if (query.skills && !query.search) filter.search_text = { contains: query.skills };
+  if (query.skills && query.search) filter.technical_skills = { contains: query.skills };
   if (query.matchConfidence) filter.match_confidence = query.matchConfidence;
   if (typeof query.needsReview === 'boolean') filter.needs_review = query.needsReview;
   if (typeof query.heldOut === 'boolean') filter.held_out = query.heldOut;

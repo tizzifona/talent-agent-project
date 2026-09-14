@@ -449,11 +449,60 @@ body {
 .people-meta,
 .pagination {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   margin: 10px 0;
   color: var(--text-muted);
   font-size: 0.95rem;
+}
+
+.column-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.column-controls .secondary-btn {
+  padding: 8px 12px;
+  font-size: 0.88rem;
+  width: auto;
+}
+
+.filters-card {
+  margin-bottom: 16px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.column-table th:last-child,
+.column-table td:last-child {
+  position: sticky;
+  right: 0;
+  background: var(--surface-card);
+  box-shadow: -8px 0 12px -10px rgba(0, 0, 0, 0.55);
+  min-width: 150px;
+}
+
+.column-table th,
+.column-table td {
+  white-space: nowrap;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.column-table td:nth-child(5),
+.column-table th:nth-child(5) {
+  white-space: normal;
+  max-width: 220px;
 }
 
 .pagination button {
