@@ -12,6 +12,9 @@ export const COLLECTIONS = {
   mailingCampaigns: 'bh-talent-mailing-campaigns',
   mailingTokens: 'bh-talent-mailing-tokens',
   pendingUpdates: 'bh-talent-pending-updates',
+  peopleLists: 'bh-talent-people-lists',
+  mailSettings: 'bh-talent-mail-settings',
+  mailSends: 'bh-talent-mail-sends',
 } as const;
 
 export const TYPES = {
@@ -25,6 +28,9 @@ export const TYPES = {
   mailingCampaign: 'mailing-campaign',
   mailingToken: 'mailing-token',
   pendingUpdate: 'pending-update',
+  peopleList: 'people-list',
+  mailSettings: 'mail-settings',
+  mailSend: 'mail-send',
 } as const;
 
 export const LATEST_RUN_ID = 'latest';

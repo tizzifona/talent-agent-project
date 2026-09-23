@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=8">
+    <link rel="stylesheet" href="app.css?v=9">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -166,17 +166,26 @@
               </div>
               <div>
                 <label for="people-skills">Skills</label>
-                <input id="people-skills" type="text" placeholder="Contains">
+                <input id="people-skills" type="text" placeholder="php, python">
               </div>
               <div class="filter-actions">
                 <button id="people-apply-btn" class="primary-btn">Apply</button>
                 <button id="people-reset-btn" class="secondary-btn">Reset</button>
                 <button id="people-add-btn" class="primary-btn">Add candidate</button>
+                <button id="people-save-list-btn" class="secondary-btn" type="button">Save as list</button>
               </div>
+            </div>
+            <p class="upload-hint">Search, country, and skills apply together. Separate skills with commas — a person must match every skill. Country matches any country you list.</p>
+            <div class="list-bar">
+              <label for="people-lists">Saved lists</label>
+              <select id="people-lists">
+                <option value="">All people in this table</option>
+              </select>
             </div>
           </div>
           <div id="panel-people">
             <section class="card">
+              <p id="people-list-banner" class="upload-hint" style="display: none;"></p>
               <div class="people-meta">
                 <span id="people-count">0 people</span>
                 <span id="people-page-label"></span>
@@ -242,7 +251,38 @@
         <section class="view" id="view-mailing">
           <p class="page-kicker">Outreach</p>
           <h1>Mailing campaign</h1>
-          <p class="lede">Compose a message, pick one of five editable templates, set frequency and schedule. Each recipient gets a 3-day temporary link. Email is prepared and stored; sending is not wired yet.</p>
+          <p class="lede">Compose a message, then send it through Gmail. Each day stops at the limit you set, and the same template is not sent twice to the same address.</p>
+          <section class="card">
+            <h2>Email connection</h2>
+            <p class="upload-hint">Use a Gmail address with an app password. The password is stored in this daemon only, not in the project files. Start with a low daily limit so the mailbox is not blocked.</p>
+            <div class="settings-grid">
+              <div class="setting-item">
+                <label for="smtp-user">Gmail address</label>
+                <input id="smtp-user" type="email" placeholder="name@gmail.com" autocomplete="off">
+              </div>
+              <div class="setting-item">
+                <label for="smtp-password">App password</label>
+                <input id="smtp-password" type="password" placeholder="Leave blank to keep the saved password" autocomplete="new-password">
+              </div>
+              <div class="setting-item">
+                <label for="smtp-from">From name</label>
+                <input id="smtp-from" type="text" value="Blue Hope">
+              </div>
+              <div class="setting-item">
+                <label for="smtp-limit">Daily send limit</label>
+                <input id="smtp-limit" type="number" min="1" max="500" value="50">
+              </div>
+              <div class="setting-item">
+                <label for="smtp-test-to">Send test to</label>
+                <input id="smtp-test-to" type="email" placeholder="Same as the Gmail address if empty">
+              </div>
+            </div>
+            <div class="btn-row">
+              <button id="smtp-save-btn" class="secondary-btn" type="button">Save email connection</button>
+              <button id="smtp-test-btn" class="primary-btn" type="button">Send test email</button>
+            </div>
+            <p class="upload-hint" id="smtp-status">Not connected yet.</p>
+          </section>
           <section class="card">
             <div class="settings-grid">
               <div class="setting-item">
@@ -289,7 +329,8 @@
             <div class="btn-row">
               <button id="mailing-save-template-btn" class="secondary-btn">Save template edits</button>
               <button id="mailing-refresh-btn" class="secondary-btn">Refresh count</button>
-              <button id="mailing-prepare-btn" class="primary-btn">Prepare campaign &amp; links</button>
+              <button id="mailing-prepare-btn" class="secondary-btn">Prepare campaign &amp; links</button>
+              <button id="mailing-send-btn" class="primary-btn" type="button">Send next batch</button>
               <button id="mailing-open-table-btn" class="secondary-btn">Open this table</button>
             </div>
           </section>
@@ -418,6 +459,8 @@
       const FIELD_LABELS = Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, f.replace(/_/g, ' ')]));
       const CHAT_SYSTEM_PROMPT = `You are the Magic expert chat for Blue Hope Talent Agent on an open talent table.
 Help the operator find and understand candidates quickly. Answer from the product and structured memory when needed.
+Use search_people for candidate lookup. search, country, and skills apply together. Comma-separated skills must all match.
+When the operator wants those people kept as a named list, call save_people_list with the same filters and the name they asked for.
 Do not invent employment_status. refugee_status is sensitive.`;
       const LOCAL_ANSWERS = [
         {
@@ -430,7 +473,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
         },
         {
           match: /mail|outreach|campaign|segment|send|template|link/i,
-          text: 'Mailing prepares a campaign with five editable templates, frequency, and schedule. Each person gets a 3-day temporary link to update data or opt out. Admin must approve updates. Email sending is not wired yet.',
+          text: 'Connect Gmail under Email connection and send a test first. Campaign sends stop at the daily limit and will not send the same template twice to one address. Save a filtered group with Save as list, then pick that list in the mailing segment.',
         },
         {
           match: /export|download|xlsx|excel file|csv file/i,
@@ -459,7 +502,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
         next: 'The unified table is saved. Open it to edit people, export, or set up mailing.',
         tables: 'Open a table to work with people in the app. Rename or delete from the library.',
         workspace: 'Edit candidates here. Ask me to help search this table. Pending updates need your approval.',
-        mailing: 'Pick a template, set frequency and schedule, then prepare links. Sending is stored, not emailed yet.',
+        mailing: 'Connect Gmail, send yourself a test, then send a campaign. Daily limit and duplicate protection are on.',
         candidate: 'This is a private 3-day link. Update your data or opt out. An admin confirms changes.',
       };
       const CRUMBS = {
@@ -665,6 +708,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
           this.matchingResults = null;
           this.dashboard = { hasData: false, run: null, stats: null };
           this.people = { records: [], count: 0, offset: 0 };
+          this.activeList = null;
           this.mergeSourceId = '';
           this.currentTable = null;
           this.currentView = 'hub';
@@ -711,6 +755,30 @@ Do not invent employment_status. refugee_status is sensitive.`;
             }
 
             const clientTools = createDefaultBrowserChatTools(this.app);
+            const toolParams = {
+              type: 'object',
+              properties: {
+                search: { type: 'string', description: 'Name, email, or phone. Comma-separated terms must all match.' },
+                country: { type: 'string', description: 'Country text. Comma-separated countries match any of them.' },
+                skills: { type: 'string', description: 'Skills such as php, python. A person must match every skill.' },
+                name: { type: 'string', description: 'Name for the saved list.' },
+              },
+              additionalProperties: false,
+            };
+            clientTools.register('search_people', {
+              type: 'function',
+              name: 'search_people',
+              execution: 'client',
+              description: 'Filter the open talent table by search, country, and skills together, and show the matches.',
+              parameters: toolParams,
+            }, async (input) => this.applyChatSearch(input || {}));
+            clientTools.register('save_people_list', {
+              type: 'function',
+              name: 'save_people_list',
+              execution: 'client',
+              description: 'Save the people matching search, country, and skills as a named list the operator can reopen and mail.',
+              parameters: toolParams,
+            }, async (input) => this.savePeopleList(input || {}));
             this.chatClient = new GenerativeChatClient({
               app: this.app,
               agentTab: 'agent',
@@ -818,9 +886,19 @@ Do not invent employment_status. refugee_status is sensitive.`;
             document.getElementById('people-search').value = '';
             document.getElementById('people-country').value = '';
             document.getElementById('people-skills').value = '';
+            this.activeList = null;
+            const lists = document.getElementById('people-lists');
+            if (lists) lists.value = '';
             this.people.offset = 0;
             this.reloadWorkspaceList();
           });
+          document.getElementById('people-save-list-btn').addEventListener('click', () => this.savePeopleList({}));
+          document.getElementById('people-lists').addEventListener('change', (event) => {
+            this.openSavedList(event.target.value);
+          });
+          document.getElementById('smtp-save-btn').addEventListener('click', () => this.saveMailSettings());
+          document.getElementById('smtp-test-btn').addEventListener('click', () => this.sendTestEmail());
+          document.getElementById('mailing-send-btn').addEventListener('click', () => this.sendMailing());
           document.getElementById('people-search').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
               this.people.offset = 0;
@@ -959,9 +1037,12 @@ Do not invent employment_status. refugee_status is sensitive.`;
           document.getElementById('panel-approvals').classList.toggle('hidden', panel !== 'approvals');
           document.getElementById('workspace-filters').classList.toggle('hidden', panel === 'approvals');
           document.getElementById('people-add-btn').style.display = panel === 'people' ? '' : 'none';
-          if (panel === 'review') this.loadReview();
-          if (panel === 'people') this.loadPeople();
-          if (panel === 'approvals') this.loadPendingUpdates('pending-list');
+          if (panel === 'review') return this.loadReview();
+          if (panel === 'people') {
+            this.loadSavedLists();
+            return this.loadPeople();
+          }
+          if (panel === 'approvals') return this.loadPendingUpdates('pending-list');
         }
 
         reloadWorkspaceList() {
@@ -1150,6 +1231,187 @@ Do not invent employment_status. refugee_status is sensitive.`;
           }
         }
 
+        async applyChatSearch(input) {
+          if (!this.currentTable?.run_id) throw new Error('Open a saved table first');
+          if (input.search != null) document.getElementById('people-search').value = String(input.search);
+          if (input.country != null) document.getElementById('people-country').value = String(input.country);
+          if (input.skills != null) document.getElementById('people-skills').value = String(input.skills);
+          this.activeList = null;
+          const lists = document.getElementById('people-lists');
+          if (lists) lists.value = '';
+          this.people.offset = 0;
+          await this.showWorkspacePanel('people');
+          const filters = this.currentFilters();
+          return {
+            count: this.people.count,
+            search: filters.search,
+            country: filters.country,
+            skills: filters.skills,
+            people: (this.people.records || []).slice(0, 8).map((person) => ({
+              name: person.full_name || person.primary_email || person.id,
+              email: person.primary_email || '',
+              country: person.country_of_residence || person.country || '',
+            })),
+          };
+        }
+
+        async savePeopleList(input = {}) {
+          if (!this.currentTable?.run_id) throw new Error('Open a saved table first');
+          const typed = String(input.name || '').trim();
+          const name = typed || window.prompt('Name this list');
+          if (!name || !String(name).trim()) return { saved: false };
+          if (input.search != null) document.getElementById('people-search').value = String(input.search);
+          if (input.country != null) document.getElementById('people-country').value = String(input.country);
+          if (input.skills != null) document.getElementById('people-skills').value = String(input.skills);
+          const filters = this.currentFilters();
+          const result = await this.agentPost('/lists/save', {
+            name: String(name).trim(),
+            runId: this.currentTable.run_id,
+            tableId: this.currentTable.id,
+            search: filters.search,
+            country: filters.country,
+            skills: filters.skills,
+            ids: this.activeList?.person_ids,
+          });
+          const record = result.record || {};
+          await this.loadSavedLists(record.id);
+          this.addChatMessage('assistant', `Saved list “${record.name}” with ${record.count || 0} people.`);
+          return { saved: true, id: record.id, name: record.name, count: record.count || 0 };
+        }
+
+        async loadSavedLists(selectId = '') {
+          const select = document.getElementById('people-lists');
+          const segment = document.getElementById('mailing-segment');
+          if (!this.currentTable?.id) return;
+          try {
+            const result = await this.agentPost('/lists/list', { tableId: this.currentTable.id });
+            const records = result.records || [];
+            if (select) {
+              const current = selectId || select.value;
+              select.innerHTML = '<option value="">All people in this table</option>' + records.map((list) => (
+                `<option value="${escapeHtml(list.id)}">${escapeHtml(list.name)} (${list.count || 0})</option>`
+              )).join('');
+              select.value = current;
+              if (select.value !== current) select.value = '';
+            }
+            if (segment) {
+              const current = segment.value;
+              const builtin = [
+                ['all', 'All people in the working table'],
+                ['review', 'Still needs review'],
+                ['employment', 'Employment status unknown'],
+              ];
+              segment.innerHTML = builtin.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')
+                + records.map((list) => (
+                  `<option value="list:${escapeHtml(list.id)}">List: ${escapeHtml(list.name)} (${list.count || 0})</option>`
+                )).join('');
+              segment.value = [...segment.options].some((option) => option.value === current) ? current : 'all';
+            }
+          } catch (error) {
+            console.error('List load failed:', error);
+          }
+        }
+
+        async openSavedList(id) {
+          this.people.offset = 0;
+          if (!id) {
+            this.activeList = null;
+            await this.loadPeople();
+            return;
+          }
+          const result = await this.agentPost('/lists/get', { id });
+          this.activeList = result.record || null;
+          await this.loadPeople();
+        }
+
+        async loadMailSettings() {
+          try {
+            const settings = await this.agentPost('/mailing/settings', {});
+            document.getElementById('smtp-user').value = settings.user || '';
+            document.getElementById('smtp-from').value = settings.from_name || 'Blue Hope';
+            document.getElementById('smtp-limit').value = settings.daily_limit || 50;
+            document.getElementById('smtp-password').value = '';
+            const status = document.getElementById('smtp-status');
+            status.textContent = settings.password_set
+              ? `Connected as ${settings.user}. Daily limit ${settings.daily_limit}. App password is saved.`
+              : 'Add the Gmail address and app password, then send a test.';
+          } catch (error) {
+            document.getElementById('smtp-status').textContent = error.message;
+          }
+        }
+
+        async saveMailSettings() {
+          const status = document.getElementById('smtp-status');
+          try {
+            const settings = await this.agentPost('/mailing/settings/save', {
+              user: document.getElementById('smtp-user').value.trim(),
+              app_password: document.getElementById('smtp-password').value,
+              from_name: document.getElementById('smtp-from').value.trim(),
+              daily_limit: Number(document.getElementById('smtp-limit').value || 50),
+              host: 'smtp.gmail.com',
+              port: 587,
+            });
+            document.getElementById('smtp-password').value = '';
+            status.textContent = `Saved for ${settings.user}. Daily limit ${settings.daily_limit}. Send a test before a campaign.`;
+          } catch (error) {
+            status.textContent = error.message;
+          }
+        }
+
+        async sendTestEmail() {
+          const status = document.getElementById('smtp-status');
+          status.textContent = 'Sending test...';
+          try {
+            const to = document.getElementById('smtp-test-to').value.trim();
+            const result = await this.agentPost('/mailing/test', { to });
+            const problem = (result.errors || [])[0];
+            status.textContent = result.sent
+              ? `Test sent. ${result.remainingToday} left in today's limit.`
+              : (problem || 'Test was not sent.');
+          } catch (error) {
+            status.textContent = error.message;
+          }
+        }
+
+        describeDelivery(result) {
+          const problem = (result.errors || [])[0];
+          return [
+            `Sent ${result.sent || 0}.`,
+            `${result.skippedDuplicate || 0} already had this message.`,
+            `${result.skippedLimit || 0} held for the daily limit.`,
+            `${result.deferred || 0} waiting for the next batch.`,
+            `${result.remainingToday ?? 0} left today.`,
+            problem || '',
+          ].filter(Boolean).join(' ');
+        }
+
+        async sendMailing() {
+          const tableId = document.getElementById('mailing-table').value;
+          const note = document.getElementById('mailing-prepare-note');
+          if (!tableId) {
+            note.textContent = 'Choose a table first.';
+            return;
+          }
+          if (!confirm('Send the next batch now? This uses Gmail and counts toward today's limit.')) return;
+          note.textContent = 'Sending...';
+          try {
+            const table = (await this.agentPost('/tables/get', { id: tableId })).record;
+            const result = await this.agentPost('/mailing/send', {
+              tableId: table.id,
+              tableName: table.name,
+              runId: table.run_id,
+              segment: document.getElementById('mailing-segment').value,
+              templateId: this.selectedTemplateId,
+              subject: document.getElementById('mailing-subject').value,
+              body: document.getElementById('mailing-body').value,
+              baseUrl: window.location.href.split('?')[0],
+            });
+            note.textContent = this.describeDelivery(result);
+          } catch (error) {
+            note.textContent = error.message;
+          }
+        }
+
         reviewActions(person) {
           if (!person.needs_review) return '';
           return this.reviewRowActions(person);
@@ -1161,6 +1423,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
               needsReview: false,
               offset: this.people.offset,
               limit: PAGE_SIZE,
+              ids: this.activeList?.person_ids,
             }));
             this.people.records = result.records || [];
             this.people.count = result.count || 0;
@@ -1181,6 +1444,16 @@ Do not invent employment_status. refugee_status is sensitive.`;
             }
             const start = this.people.count === 0 ? 0 : this.people.offset + 1;
             const end = Math.min(this.people.offset + PAGE_SIZE, this.people.count);
+            const banner = document.getElementById('people-list-banner');
+            if (banner) {
+              if (this.activeList) {
+                banner.style.display = 'block';
+                banner.textContent = `List “${this.activeList.name}”. Filters still apply inside this list.`;
+              } else {
+                banner.style.display = 'none';
+                banner.textContent = '';
+              }
+            }
             document.getElementById('people-count').textContent = `${this.people.count} people`;
             document.getElementById('people-page-label').textContent = this.people.count
               ? `${start}–${end}`
@@ -1813,6 +2086,8 @@ Do not invent employment_status. refugee_status is sensitive.`;
           await this.refreshMailingCount();
           await this.loadTemplates();
           await this.loadPendingUpdates('mailing-pending');
+          await this.loadMailSettings();
+          await this.loadSavedLists();
         }
 
         async loadTemplates() {
@@ -1891,7 +2166,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
               baseUrl: window.location.href.split('?')[0],
             });
             document.getElementById('mailing-prepare-note').textContent =
-              `Prepared ${result.recipientCount || 0} messages. Links expire ${result.expiresAt ? new Date(result.expiresAt).toLocaleString() : 'in 3 days'}. Not sent — stored for a future email provider.`;
+              `Prepared ${result.recipientCount || 0} messages. Links expire ${result.expiresAt ? new Date(result.expiresAt).toLocaleString() : 'in 3 days'}. Use Send next batch to deliver them.`;
             const messages = result.messages || [];
             document.getElementById('mailing-prepared').innerHTML = messages.length
               ? messages.slice(0, 40).map((msg) => `

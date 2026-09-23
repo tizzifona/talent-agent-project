@@ -12,6 +12,8 @@ import {
   updatePerson,
   type JsonMap,
 } from './person-store.ts';
+import { getPeopleList } from './list-store.ts';
+import { deliverMessages } from './mailer.ts';
 
 const TOKEN_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -211,6 +213,27 @@ export async function saveTemplate(input: {
   return { id, ...object };
 }
 
+async function selectRecipients(runId: string, segment: string): Promise<JsonMap[]> {
+  const people = await exportPersonRows(runId);
+  let recipients = people.filter((person) => !person.held_out && !person.opted_out && person.primary_email);
+  if (segment === 'review') {
+    recipients = recipients.filter((person) => person.needs_review);
+  } else if (segment === 'employment') {
+    recipients = recipients.filter((person) => !person.employment_status || person.employment_status === 'unknown');
+  } else if (segment.startsWith('list:')) {
+    const list = await getPeopleList(segment.slice(5));
+    const ids = new Set(((list?.person_ids as string[]) || []).map((id) => String(id)));
+    recipients = recipients.filter((person) => ids.has(String(person.id)));
+  }
+  const seen = new Set<string>();
+  return recipients.filter((person) => {
+    const email = String(person.primary_email || '').trim().toLowerCase();
+    if (!email || seen.has(email)) return false;
+    seen.add(email);
+    return true;
+  });
+}
+
 export async function prepareCampaign(input: {
   tableId: string;
   tableName: string;
@@ -223,13 +246,7 @@ export async function prepareCampaign(input: {
   scheduleAt: string;
   baseUrl: string;
 }): Promise<JsonMap> {
-  const people = await exportPersonRows(input.runId);
-  let recipients = people.filter((p) => !p.held_out && !p.opted_out);
-  if (input.segment === 'review') {
-    recipients = recipients.filter((p) => p.needs_review);
-  } else if (input.segment === 'employment') {
-    recipients = recipients.filter((p) => !p.employment_status || p.employment_status === 'unknown');
-  }
+  const recipients = await selectRecipients(input.runId, input.segment);
 
   const campaignId = `camp-${Date.now()}`;
   const createdAt = new Date().toISOString();
@@ -285,7 +302,7 @@ export async function prepareCampaign(input: {
       recipient_count: messages.length,
       created_at: createdAt,
       status: 'prepared',
-      send_note: 'Stored only. Outbound email provider is not wired yet.',
+      send_note: 'Links prepared. Use Send to deliver through Gmail, within the daily limit.',
     },
   }]);
 
@@ -296,6 +313,83 @@ export async function prepareCampaign(input: {
     messages,
     status: 'prepared',
   };
+}
+
+export async function sendCampaign(input: {
+  tableId: string;
+  tableName: string;
+  runId: string;
+  segment: string;
+  templateId: string;
+  subject: string;
+  body: string;
+  baseUrl: string;
+}): Promise<JsonMap> {
+  const recipients = await selectRecipients(input.runId, input.segment);
+  const campaignId = `camp-${Date.now()}`;
+  const createdAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
+  const base = String(input.baseUrl || '').replace(/[?#].*$/, '').replace(/\/$/, '');
+  const messages: Array<{ email: string; subject: string; body: string; personId: string }> = [];
+  const tokenRecords: Array<{ id: string; object: JsonMap }> = [];
+
+  for (const person of recipients) {
+    const token = randomToken();
+    const updateLink = `${base}?token=${token}`;
+    const email = String(person.primary_email || '').trim();
+    tokenRecords.push({
+      id: token,
+      object: {
+        token,
+        campaign_id: campaignId,
+        person_id: person.id,
+        run_id: input.runId,
+        table_id: input.tableId,
+        email,
+        snapshot: personSnapshot(person),
+        created_at: createdAt,
+        expires_at: expiresAt,
+        used_at: '',
+        status: 'active',
+      },
+    });
+    messages.push({
+      personId: String(person.id || ''),
+      email,
+      subject: renderTemplate(input.subject, person, updateLink),
+      body: renderTemplate(input.body, person, updateLink),
+    });
+  }
+
+  const delivery = await deliverMessages({
+    messages,
+    templateSubject: input.subject,
+    templateBody: input.body,
+    campaignId,
+  });
+  const sentEmails = new Set((delivery.sentEmails as string[]) || []);
+  const kept = tokenRecords.filter((record) => sentEmails.has(String(record.object.email || '').trim().toLowerCase()));
+  if (kept.length) await structuredWrite(COLLECTIONS.mailingTokens, TYPES.mailingToken, kept);
+
+  await structuredWrite(COLLECTIONS.mailingCampaigns, TYPES.mailingCampaign, [{
+    id: campaignId,
+    object: {
+      table_id: input.tableId,
+      table_name: input.tableName,
+      run_id: input.runId,
+      segment: input.segment,
+      template_id: input.templateId,
+      subject: input.subject,
+      body: input.body,
+      recipient_count: recipients.length,
+      sent_count: delivery.sent,
+      created_at: createdAt,
+      status: Number(delivery.sent) > 0 ? 'sent' : 'skipped',
+      send_note: 'Sent through Gmail SMTP with a daily cap and duplicate protection.',
+    },
+  }]);
+
+  return { campaignId, recipientCount: recipients.length, ...delivery };
 }
 
 export async function listCampaigns(tableId?: string): Promise<JsonMap[]> {

@@ -1,6 +1,7 @@
 {
   "imports": {
     "webdaemon": "npm:webdaemon",
-    "$static/": "https://webdaemon.online/latest/static/"
+    "$static/": "https://webdaemon.online/latest/static/",
+    "nodemailer": "npm:nodemailer@6.10.1"
   }
 }
