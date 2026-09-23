@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=7">
+    <link rel="stylesheet" href="app.css?v=8">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -480,6 +480,180 @@ Do not invent employment_status. refugee_status is sensitive.`;
           '"': '&quot;',
           "'": '&#39;',
         }[char]));
+      }
+
+      function profileText(person, key) {
+        const read = (value) => {
+          if (value === undefined || value === null) return '';
+          const text = String(value).trim();
+          if (!text || text === '-' || text === 'undefined' || text === 'null') return '';
+          return text;
+        };
+        const direct = read(person?.[key]);
+        if (direct) return direct;
+        const meta = person?.field_provenance?.[key];
+        if (meta && typeof meta === 'object') return read(meta.value);
+        return read(meta);
+      }
+
+      function splitList(value) {
+        return String(value || '')
+          .split(/\s*\|\s*|\s*,\s*/)
+          .map((part) => part.trim())
+          .filter((part) => part && part !== '-');
+      }
+
+      function shortSourceName(name) {
+        return String(name || 'Unknown source')
+          .replace(/\.(xlsx|xls|csv)$/i, '')
+          .replace(/^\d+\)\s*/, '')
+          .trim();
+      }
+
+      function profileRows(person, fields) {
+        return fields.map(([key, label, note]) => {
+          const value = profileText(person, key);
+          if (!value) return '';
+          const parts = splitList(value);
+          const shown = parts.length > 1
+            ? `<div class="skill-list">${parts.map((item) => `<span class="skill-chip">${escapeHtml(item)}</span>`).join('')}</div>`
+            : escapeHtml(value);
+          const extra = note ? ` <span class="muted">${escapeHtml(note)}</span>` : '';
+          return `<div class="profile-row"><span>${escapeHtml(label)}</span><div class="profile-value">${shown}${extra}</div></div>`;
+        }).join('');
+      }
+
+      function profileCard(title, rows, wide = false) {
+        if (!rows) return '';
+        return `<section class="profile-card${wide ? ' wide' : ''}"><h3>${escapeHtml(title)}</h3>${rows}</section>`;
+      }
+
+      function skillCard(person) {
+        const groups = [
+          ['Technical skills', profileText(person, 'technical_skills')],
+          ['Key skills', profileText(person, 'key_skills')],
+          ['Skill tags', profileText(person, 'skill_tags')],
+        ].filter(([, value]) => value);
+        if (!groups.length) return '';
+        const body = groups.map(([label, value]) => `
+          <div class="profile-row">
+            <span>${escapeHtml(label)}</span>
+            <div class="skill-list">${splitList(value).map((item) => `<span class="skill-chip">${escapeHtml(item)}</span>`).join('')}</div>
+          </div>
+        `).join('');
+        return `<section class="profile-card wide"><h3>Skills</h3>${body}</section>`;
+      }
+
+      function sourceCard(person) {
+        const rows = Array.isArray(person.sources) ? person.sources : [];
+        const groups = new Map();
+        for (const source of rows) {
+          const file = shortSourceName(source.source_file || source.source_database || 'Unknown source');
+          if (!groups.has(file)) groups.set(file, []);
+          const rowId = String(source.source_row_id || '').trim();
+          if (rowId) groups.get(file).push(rowId);
+        }
+        if (!groups.size) return '';
+        const items = [...groups.entries()].map(([file, ids]) => {
+          const unique = [...new Set(ids)];
+          const where = unique.length ? ` · row ${unique.join(', ')}` : '';
+          return `<li><strong>${escapeHtml(file)}</strong>${escapeHtml(where)}</li>`;
+        }).join('');
+        return `<section class="profile-card wide"><h3>Sources</h3><ul class="source-list">${items}</ul></section>`;
+      }
+
+      function renderPersonProfile(person) {
+        const email = profileText(person, 'primary_email');
+        const phone = profileText(person, 'phone_number');
+        const country = profileText(person, 'country_of_residence') || profileText(person, 'country');
+        const city = profileText(person, 'city_of_residence');
+        const place = [city, country].filter(Boolean).join(', ');
+        const kicker = [
+          email ? `<span>Email <strong>${escapeHtml(email)}</strong></span>` : '',
+          phone ? `<span>Phone <strong>${escapeHtml(phone)}</strong></span>` : '',
+          place ? `<span>Location <strong>${escapeHtml(place)}</strong></span>` : '',
+        ].filter(Boolean).join('');
+
+        const chips = [
+          ['Match', profileText(person, 'match_type')],
+          ['Confidence', profileText(person, 'match_confidence')],
+          ['Employment', profileText(person, 'employment_status') || 'unknown'],
+          ['Seniority', profileText(person, 'seniority')],
+          ['Review', person.needs_review
+            ? 'Needs review'
+            : (profileText(person, 'review_status') || 'Clean')],
+        ].filter(([, value]) => value).map(([label, value]) =>
+          `<span class="profile-chip"><em>${escapeHtml(label)}</em> ${escapeHtml(value)}</span>`
+        ).join('');
+
+        const english = profileText(person, 'english_level');
+        const englishRaw = profileText(person, 'english_level_raw');
+        const educationRows = [
+          ['languages', 'Languages'],
+          ['english_level', 'English level'],
+          ['highest_education_level', 'Education'],
+          ['field_of_study', 'Field of study'],
+          ['courses_and_certifications', 'Courses'],
+        ];
+        const education = profileRows(person, educationRows.map(([key, label]) => {
+          if (key === 'english_level' && english && englishRaw && englishRaw !== english) {
+            return [key, label, `source: ${englishRaw}`];
+          }
+          return [key, label];
+        }));
+
+        const cards = [
+          profileCard('Identity', profileRows(person, [
+            ['candidate_id', 'Candidate ID'],
+            ['first_name', 'First name'],
+            ['last_names', 'Last name'],
+            ['gender', 'Gender'],
+            ['age', 'Age'],
+          ])),
+          profileCard('Contact', profileRows(person, [
+            ['primary_email', 'Email'],
+            ['secondary_email', 'Secondary email'],
+            ['phone_number', 'Phone'],
+            ['preferred_contact_method', 'Preferred contact'],
+            ['linkedin_url', 'LinkedIn'],
+            ['github_url', 'GitHub'],
+          ])),
+          profileCard('Location', profileRows(person, [
+            ['country_of_residence', 'Country of residence'],
+            ['city_of_residence', 'City'],
+            ['country_of_origin', 'Country of origin'],
+          ])),
+          profileCard('Languages and education', education),
+          profileCard('Experience', profileRows(person, [
+            ['job_title', 'Job title'],
+            ['years_of_experience', 'Years of experience'],
+            ['years_of_tech_experience', 'Years in tech'],
+            ['has_tech_experience', 'Tech experience'],
+            ['work_experience_summary', 'Background'],
+          ]), true),
+          skillCard(person),
+          profileCard('Legal', profileRows(person, [
+            ['legal_status', 'Legal status'],
+            ['work_permission', 'Work permission'],
+            ['refugee_status', 'Refugee status', 'sensitive, left out of exports'],
+          ])),
+          profileCard('Review', profileRows(person, [
+            ['match_type', 'Match'],
+            ['match_confidence', 'Confidence'],
+            ['employment_status', 'Employment'],
+            ['seniority', 'Seniority'],
+            ['review_status', 'Review status'],
+            ['review_reason', 'Review note'],
+            ['review_decided_by', 'Decided by'],
+          ])),
+          sourceCard(person),
+        ].join('');
+
+        return `
+          ${kicker ? `<div class="profile-kicker">${kicker}</div>` : ''}
+          ${chips ? `<div class="profile-summary">${chips}</div>` : ''}
+          <div class="profile-grid">${cards}</div>
+        `;
       }
 
       class TalentAgentApp {
@@ -993,6 +1167,11 @@ Do not invent employment_status. refugee_status is sensitive.`;
             const empty = document.getElementById('people-empty');
             const wrap = document.getElementById('people-table-wrap');
             if (this.people.records.length === 0) {
+              const filters = this.currentFilters();
+              const filtered = filters.search || filters.country || filters.skills;
+              empty.textContent = filtered
+                ? 'No people match these filters.'
+                : 'No people in this table yet.';
               empty.style.display = 'block';
               wrap.style.display = 'none';
             } else {
@@ -1074,80 +1253,17 @@ Do not invent employment_status. refugee_status is sensitive.`;
               alert('Person not found');
               return;
             }
-            document.getElementById('modal-title').textContent = person.full_name || 'Person';
-            const provenance = person.field_provenance || {};
-            const provenanceRows = Object.entries(provenance).map(([field, meta]) => {
-              const overwritten = (meta.overwritten_values || [])
-                .map((item) => `${item.value} (${item.source_file})`)
-                .join('; ');
-              return `
-                <tr>
-                  <td>${escapeHtml(field)}</td>
-                  <td>${escapeHtml(meta.value || '')}</td>
-                  <td>${escapeHtml(meta.source_file || '')}:${escapeHtml(meta.source_row_id || '')}</td>
-                  <td>${escapeHtml(meta.match_confidence || '')}</td>
-                  <td>${escapeHtml(overwritten || '')}</td>
-                </tr>
-              `;
-            }).join('');
-            const sources = (person.sources || []).map((source) => `
-              <tr>
-                <td>${escapeHtml(source.source_file || '')}${source.source_database ? ` <span class="muted">${escapeHtml(source.source_database)}</span>` : ''}</td>
-                <td>${escapeHtml(source.source_row_id || '')}</td>
-                <td>${escapeHtml(source.name || '')}</td>
-                <td>${escapeHtml(source.email || '')}</td>
-                <td>${escapeHtml(source.phone || '')}</td>
-              </tr>
-            `).join('');
-
+            const displayName = person.full_name
+              || [person.first_name, person.last_names].filter(Boolean).join(' ')
+              || 'Person';
+            document.getElementById('modal-title').textContent = displayName;
             document.getElementById('report-content').innerHTML = `
               <div class="row-actions modal-actions">
                 <button class="action-btn" data-person-action="edit" data-person-id="${escapeHtml(person.id)}">Edit</button>
                 <button class="action-btn danger" data-person-action="delete" data-person-id="${escapeHtml(person.id)}">Delete</button>
                 ${person.needs_review ? this.reviewActions(person) : ''}
               </div>
-              <dl class="detail-grid">
-                <dt>Candidate ID</dt><dd><code>${escapeHtml(person.candidate_id || '-')}</code> <span class="muted">${escapeHtml(person.id)}</span></dd>
-                <dt>Source databases</dt><dd>${escapeHtml(person.source_database || '-')}</dd>
-                <dt>Primary email</dt><dd>${escapeHtml(person.primary_email || '-')}</dd>
-                <dt>Secondary email</dt><dd>${escapeHtml(person.secondary_email || '-')}</dd>
-                <dt>Phone</dt><dd>${escapeHtml(person.phone_number || '-')}</dd>
-                <dt>Preferred contact</dt><dd>${escapeHtml(person.preferred_contact_method || '-')}</dd>
-                <dt>LinkedIn</dt><dd>${escapeHtml(person.linkedin_url || '-')}</dd>
-                <dt>GitHub</dt><dd>${escapeHtml(person.github_url || '-')}</dd>
-                <dt>Origin / residence</dt><dd>${escapeHtml(person.country_of_origin || '-')} → ${escapeHtml(person.country_of_residence || person.country || '-')}${person.city_of_residence ? ', ' + escapeHtml(person.city_of_residence) : ''}</dd>
-                <dt>Gender / age</dt><dd>${escapeHtml(person.gender || '-')} / ${escapeHtml(person.age || '-')}</dd>
-                <dt>Legal status</dt><dd>${escapeHtml(person.legal_status || '-')}</dd>
-                <dt>Refugee status</dt><dd>${escapeHtml(person.refugee_status || '-')} <span class="muted">sensitive, excluded from exports</span></dd>
-                <dt>Work permission</dt><dd>${escapeHtml(person.work_permission || '-')}</dd>
-                <dt>Languages</dt><dd>${escapeHtml(person.languages || '-')}</dd>
-                <dt>English level</dt><dd>${escapeHtml(person.english_level || '-')}${person.english_level_raw ? ` <span class="muted">(source: ${escapeHtml(person.english_level_raw)})</span>` : ''}</dd>
-                <dt>Education</dt><dd>${escapeHtml(person.highest_education_level || '-')}${person.field_of_study ? ' · ' + escapeHtml(person.field_of_study) : ''}</dd>
-                <dt>Courses</dt><dd>${escapeHtml(person.courses_and_certifications || '-')}</dd>
-                <dt>Experience</dt><dd>${escapeHtml(person.work_experience_summary || '-')}</dd>
-                <dt>Job title</dt><dd>${escapeHtml(person.job_title || '-')}</dd>
-                <dt>Years / tech years</dt><dd>${escapeHtml(person.years_of_experience || '-')} / ${escapeHtml(person.years_of_tech_experience || '-')}${person.has_tech_experience ? ` · tech: ${escapeHtml(person.has_tech_experience)}` : ''}</dd>
-                <dt>Technical skills</dt><dd>${escapeHtml(person.technical_skills || '-')}</dd>
-                <dt>Key skills</dt><dd>${escapeHtml(person.key_skills || '-')}</dd>
-                <dt>Skill tags</dt><dd>${escapeHtml(person.skill_tags || '-')}${person.skill_tags_confidence ? ` <span class="muted">(${escapeHtml(person.skill_tags_confidence)}${person.skill_tags_basis ? ' · ' + escapeHtml(person.skill_tags_basis) : ''})</span>` : ''}</dd>
-                <dt>Match</dt><dd>${escapeHtml(person.match_type || '')} / ${escapeHtml(person.match_confidence || '')}</dd>
-                <dt>Employment</dt><dd>${escapeHtml(person.employment_status || 'unknown')} <span class="muted">not inferred</span></dd>
-                <dt>Seniority</dt><dd>${escapeHtml(person.seniority || '-')}${person.seniority_confidence ? ` <span class="muted">(${escapeHtml(person.seniority_confidence)}${person.seniority_basis ? ' · ' + escapeHtml(person.seniority_basis) : ''})</span>` : ''}</dd>
-                <dt>Provenance</dt><dd>${escapeHtml(person.provenance_text || '-')}</dd>
-                <dt>Review</dt><dd>${person.needs_review ? escapeHtml(person.review_reason || 'Needs review') : escapeHtml(person.review_status || 'Clean')}</dd>
-                ${person.review_decided_by ? `<dt>Decided by</dt><dd>${escapeHtml(person.review_decided_by)} · ${escapeHtml(person.review_decided_at || '')}</dd>` : ''}
-                ${person.merged_into ? `<dt>Merged into</dt><dd><code>${escapeHtml(person.merged_into)}</code></dd>` : ''}
-              </dl>
-              <h3>Field provenance</h3>
-              <table class="report-table">
-                <thead><tr><th>Field</th><th>Value</th><th>Source</th><th>Confidence</th><th>Overwritten</th></tr></thead>
-                <tbody>${provenanceRows || '<tr><td colspan="5">None</td></tr>'}</tbody>
-              </table>
-              <h3 style="margin-top: 24px;">Source rows</h3>
-              <table class="report-table">
-                <thead><tr><th>File</th><th>Row</th><th>Name</th><th>Email</th><th>Phone</th></tr></thead>
-                <tbody>${sources || '<tr><td colspan="5">None</td></tr>'}</tbody>
-              </table>
+              ${renderPersonProfile(person)}
             `;
             document.getElementById('report-modal').classList.add('active');
           } catch (error) {
@@ -1307,15 +1423,28 @@ Do not invent employment_status. refugee_status is sensitive.`;
               }
               if (!confirm('Merge this person into the selected record? This cannot be undone from the queue.')) return;
             }
-            await this.agentPost('/persons/review', { id: personId, action, targetId });
+            const result = await this.agentPost('/persons/review', { id: personId, action, targetId });
             this.closeMergeModal();
             this.closeModal();
+            const moved = result?.person || result?.target || {};
+            const movedName = moved.full_name
+              || [moved.first_name, moved.last_names].filter(Boolean).join(' ')
+              || moved.primary_email
+              || personId;
+            if (action === 'confirm') {
+              document.getElementById('people-search').value = moved.primary_email || movedName || '';
+              document.getElementById('people-country').value = '';
+              document.getElementById('people-skills').value = '';
+              this.people.offset = 0;
+              await this.refreshDashboard();
+              this.showWorkspacePanel('people');
+              this.addChatMessage('assistant', `Review completed. ${movedName} is now in the People list.`);
+              return;
+            }
             await this.refreshDashboard();
             await this.loadPeople();
             if (this.workspacePanel === 'review') await this.loadReview();
-            this.addChatMessage('assistant', action === 'confirm'
-              ? `Review completed. ${personId} moved to the main list.`
-              : `Review ${action} saved for ${personId}.`);
+            this.addChatMessage('assistant', `Review ${action} saved for ${movedName}.`);
           } catch (error) {
             this.showError(`Review failed: ${error.message}`);
           }
@@ -1813,7 +1942,12 @@ Do not invent employment_status. refugee_status is sensitive.`;
               `;
             }).join('');
           } catch (error) {
-            el.innerHTML = `<p class="upload-hint">${escapeHtml(error.message)}</p>`;
+            const message = String(error?.message || error);
+            if (/not found/i.test(message)) {
+              el.innerHTML = '<p class="upload-hint">No pending candidate replies.</p>';
+              return;
+            }
+            el.innerHTML = `<p class="upload-hint">${escapeHtml(message)}</p>`;
           }
         }
 

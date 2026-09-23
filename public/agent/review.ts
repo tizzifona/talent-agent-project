@@ -22,12 +22,14 @@ async function savePerson(id: string, object: JsonMap): Promise<void> {
   await structuredWrite(COLLECTIONS.persons, TYPES.person, [{ id, object }]);
 }
 
-function rebuildSearchText(person: JsonMap): string {
+function rebuildSearchText(person: JsonMap, id = ''): string {
+  const email = String(person.primary_email || '');
   return [
     person.full_name,
     person.first_name,
     person.last_names,
-    person.primary_email,
+    email,
+    email.replace(/@/g, '_at_'),
     person.phone_number,
     person.country,
     person.city_of_residence,
@@ -40,6 +42,7 @@ function rebuildSearchText(person: JsonMap): string {
     person.candidate_id,
     person.person_id,
     person.id,
+    id,
   ].filter(Boolean).join(' ').toLowerCase();
 }
 
@@ -71,6 +74,7 @@ function applyDecision(
   status: 'confirmed' | 'rejected' | 'merged',
   actor: string,
   extra: JsonMap = {},
+  id = '',
 ): JsonMap {
   const next = {
     ...asObject(person),
@@ -81,7 +85,7 @@ function applyDecision(
     review_decided_by: actor,
     review_decided_at: new Date().toISOString(),
   };
-  next.search_text = rebuildSearchText(next);
+  next.search_text = rebuildSearchText(next, id || String(person.id || ''));
   return next;
 }
 
@@ -187,7 +191,7 @@ export async function confirmPerson(id: string, actor: string, note = ''): Promi
     held_out: false,
     review_note: note,
     review_reason: person.review_reason || '',
-  });
+  }, id);
   await savePerson(id, object);
   await logAction({
     personId: id,
@@ -205,7 +209,7 @@ export async function rejectPerson(id: string, actor: string, note = ''): Promis
   const object = applyDecision(person, 'rejected', actor, {
     review_note: note,
     review_reason: person.review_reason || '',
-  });
+  }, id);
   await savePerson(id, object);
   await logAction({
     personId: id,
@@ -240,12 +244,12 @@ export async function mergePersons(
       ...splitTags(target.merged_from),
       sourceId,
     ]),
-  });
+  }, targetId);
   const mergedSource = applyDecision(source, 'merged', actor, {
     merged_into: targetId,
     review_note: note,
     review_reason: source.review_reason || '',
-  });
+  }, sourceId);
 
   await savePerson(targetId, mergedTarget);
   await savePerson(sourceId, mergedSource);
