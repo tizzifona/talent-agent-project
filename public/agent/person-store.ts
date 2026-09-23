@@ -256,6 +256,8 @@ function personObject(person: MatchedPerson, runId: string, stableId: string): J
       joinTags(person.skills || []),
       candidateIdFrom(stableId),
       person.id,
+      stableId,
+      (person.primaryEmail || '').replace(/@/g, '_at_'),
     ]),
     run_id: runId,
     review_status: 'pending',
@@ -265,14 +267,29 @@ function personObject(person: MatchedPerson, runId: string, stableId: string): J
   };
 }
 
+/** Turn a typed id such as p-em-name_at_gmail.com into the stored email text. */
+export function normalizePersonSearch(raw: string): string {
+  let value = String(raw || '').trim().toLowerCase();
+  if (!value) return '';
+  value = value.replace(/^p-(?:em|ph|tal|pf|nm)-/, '');
+  value = value.replace(/_at_/g, '@');
+  return value;
+}
+
 function buildFilter(query: PersonQuery): JsonMap {
   const filter: JsonMap = {};
   if (query.runId) filter.run_id = query.runId;
-  if (query.search) filter.search_text = { contains: query.search };
+  if (query.search) {
+    const search = normalizePersonSearch(query.search);
+    if (search) filter.search_text = { contains: search };
+  }
   if (query.country) filter.country = { contains: query.country };
   // Skills live in search_text (and technical_skills). Prefer search_text so
   // key_skills / skill_tags also match.
-  if (query.skills && !query.search) filter.search_text = { contains: query.skills };
+  if (query.skills && !query.search) {
+    const skills = query.skills.trim().toLowerCase();
+    if (skills) filter.search_text = { contains: skills };
+  }
   if (query.skills && query.search) filter.technical_skills = { contains: query.skills };
   if (query.matchConfidence) filter.match_confidence = query.matchConfidence;
   if (typeof query.needsReview === 'boolean') filter.needs_review = query.needsReview;
@@ -610,11 +627,13 @@ const MUTABLE_FIELDS = [
 ];
 
 function rebuildSearchText(person: JsonMap): string {
+  const email = String(person.primary_email || '');
   return [
     person.full_name,
     person.first_name,
     person.last_names,
-    person.primary_email,
+    email,
+    email.replace(/@/g, '_at_'),
     person.phone_number,
     person.country,
     person.city_of_residence,

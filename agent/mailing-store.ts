@@ -402,14 +402,20 @@ export async function listPendingUpdates(filter: {
   if (filter.tableId) queryFilter.table_id = filter.tableId;
   if (filter.runId) queryFilter.run_id = filter.runId;
   if (filter.status) queryFilter.status = filter.status;
-  const result = await structuredQuery(COLLECTIONS.pendingUpdates, {
-    type: TYPES.pendingUpdate,
-    filter: queryFilter,
-    select: ['*'],
-    order: 'created-desc',
-    limit: 100,
-  });
-  return result.records.map(unwrap);
+  try {
+    const result = await structuredQuery(COLLECTIONS.pendingUpdates, {
+      type: TYPES.pendingUpdate,
+      filter: queryFilter,
+      select: ['*'],
+      order: 'created-desc',
+      limit: 100,
+    });
+    return result.records.map(unwrap);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/not found/i.test(message)) return [];
+    throw error;
+  }
 }
 
 export async function reviewPendingUpdate(
