@@ -97,6 +97,7 @@ export interface PersonQuery {
   matchConfidence?: string;
   needsReview?: boolean;
   heldOut?: boolean;
+  ids?: string[];
   limit?: number;
   offset?: number;
 }
@@ -121,6 +122,8 @@ const LIST_SELECT = [
   'years_of_tech_experience',
   'job_title',
   'skill_tags',
+  'search_text',
+  'country_of_origin',
   'skill_tags_confidence',
   'match_type',
   'match_confidence',
@@ -276,6 +279,41 @@ export function normalizePersonSearch(raw: string): string {
   return value;
 }
 
+/** Split "php, python" into separate terms. Commas, semicolons, and "and" all count. */
+export function splitFilterTerms(raw: string): string[] {
+  return String(raw || '')
+    .split(/\s*(?:,|;|\band\b)\s*/i)
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function textHasAll(haystack: unknown, terms: string[]): boolean {
+  const text = String(haystack || '').toLowerCase();
+  return terms.every((term) => text.includes(normalizePersonSearch(term)));
+}
+
+function textHasAny(haystack: unknown, terms: string[]): boolean {
+  const text = String(haystack || '').toLowerCase();
+  return terms.some((term) => text.includes(term.trim().toLowerCase()));
+}
+
+function skillHaystack(person: JsonMap): string {
+  return [
+    person.search_text,
+    person.technical_skills,
+    person.key_skills,
+    person.skill_tags,
+  ].map((value) => String(value || '')).join(' ');
+}
+
+function countryHaystack(person: JsonMap): string {
+  return [
+    person.country,
+    person.country_of_residence,
+    person.country_of_origin,
+  ].map((value) => String(value || '')).join(' ');
+}
+
 function buildFilter(query: PersonQuery): JsonMap {
   const filter: JsonMap = {};
   if (query.runId) filter.run_id = query.runId;
@@ -284,13 +322,6 @@ function buildFilter(query: PersonQuery): JsonMap {
     if (search) filter.search_text = { contains: search };
   }
   if (query.country) filter.country = { contains: query.country };
-  // Skills live in search_text (and technical_skills). Prefer search_text so
-  // key_skills / skill_tags also match.
-  if (query.skills && !query.search) {
-    const skills = query.skills.trim().toLowerCase();
-    if (skills) filter.search_text = { contains: skills };
-  }
-  if (query.skills && query.search) filter.technical_skills = { contains: query.skills };
   if (query.matchConfidence) filter.match_confidence = query.matchConfidence;
   if (typeof query.needsReview === 'boolean') filter.needs_review = query.needsReview;
   if (typeof query.heldOut === 'boolean') filter.held_out = query.heldOut;
@@ -485,18 +516,48 @@ export async function queryPersons(query: PersonQuery): Promise<{ count: number;
   const runId = query.runId || (run && typeof run.run_id === 'string' ? run.run_id : '');
   if (!runId) return { count: 0, records: [] };
 
+  const skillTerms = splitFilterTerms(query.skills || '');
+  const searchTerms = splitFilterTerms(query.search || '');
+  const countryTerms = splitFilterTerms(query.country || '');
+  const ids = (query.ids || []).map((id) => String(id)).filter(Boolean);
+  const local = skillTerms.length > 0 || searchTerms.length > 1 || countryTerms.length > 0 || ids.length > 0;
+  const serverSearch = !local && searchTerms.length === 1 ? searchTerms[0] : '';
+
   const result = await structuredQuery(COLLECTIONS.persons, {
     type: TYPES.person,
-    filter: buildFilter({ ...query, runId }),
+    filter: buildFilter({
+      ...query,
+      runId,
+      search: serverSearch,
+      country: '',
+      skills: '',
+    }),
     select: LIST_SELECT,
-    limit: query.limit ?? 25,
-    offset: query.offset ?? 0,
+    limit: local ? 5000 : (query.limit ?? 25),
+    offset: local ? 0 : (query.offset ?? 0),
     order: 'created-desc',
   });
 
+  if (!local) {
+    return {
+      count: result.count,
+      records: result.records.map(unwrapObject),
+    };
+  }
+
+  const idSet = new Set(ids);
+  const matched = result.records.map(unwrapObject).filter((person) => {
+    if (idSet.size && !idSet.has(String(person.id))) return false;
+    if (searchTerms.length && !textHasAll(person.search_text, searchTerms)) return false;
+    if (countryTerms.length && !textHasAny(countryHaystack(person), countryTerms)) return false;
+    if (skillTerms.length && !textHasAll(skillHaystack(person), skillTerms)) return false;
+    return true;
+  });
+  const offset = query.offset ?? 0;
+  const limit = query.limit ?? 25;
   return {
-    count: result.count,
-    records: result.records.map(unwrapObject),
+    count: matched.length,
+    records: matched.slice(offset, offset + limit),
   };
 }
 

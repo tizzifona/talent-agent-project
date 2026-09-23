@@ -37,12 +37,17 @@ import {
   prepareCampaign,
   reviewPendingUpdate,
   saveTemplate,
+  sendCampaign,
   submitTokenResponse,
 } from './mailing-store.ts';
+import { getPeopleList, listPeopleLists, savePeopleList } from './list-store.ts';
+import { getMailSettings, saveMailSettings, sendTestEmail } from './mailer.ts';
 
 const systemPrompt = `You are the on-screen assistant for Blue Hope Talent Agent.
 Help operators work with a saved talent table: search people, explain fields, review uncertain rows, and prepare mailing.
 You appear on the working-table page for quick candidate lookup by criteria the operator configures.
+Search, country, and skills apply together. Comma-separated skills must all match.
+When asked to save the current people as a named list, use save_people_list.
 Do not invent employment status. Consents live separately. refugee_status is sensitive.`;
 
 const agent = new GenerativeChatAgent({
@@ -305,6 +310,44 @@ Deno.serve({ port: 0 }, async (request) => {
       const body = await request.json();
       if (!body?.runId || !body?.tableId) return response({ error: 'tableId and runId required' });
       return response({ ok: await prepareCampaign(body) });
+    }
+
+    if (url.pathname.endsWith('/mailing/send') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.runId || !body?.tableId) return response({ error: 'tableId and runId required' });
+      return response({ ok: await sendCampaign(body) });
+    }
+
+    if (url.pathname.endsWith('/mailing/settings') && request.method === 'POST') {
+      return response({ ok: await getMailSettings() });
+    }
+
+    if (url.pathname.endsWith('/mailing/settings/save') && request.method === 'POST') {
+      const body = await request.json();
+      return response({ ok: await saveMailSettings(body || {}) });
+    }
+
+    if (url.pathname.endsWith('/mailing/test') && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      return response({ ok: await sendTestEmail(String(body?.to || '')) });
+    }
+
+    if (url.pathname.endsWith('/lists/save') && request.method === 'POST') {
+      const body = await request.json();
+      return response({ ok: { record: await savePeopleList(body || {}) } });
+    }
+
+    if (url.pathname.endsWith('/lists/list') && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      return response({ ok: { records: await listPeopleLists(body?.tableId) } });
+    }
+
+    if (url.pathname.endsWith('/lists/get') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'List id required' });
+      const record = await getPeopleList(String(body.id));
+      if (!record) return response({ error: 'List not found' });
+      return response({ ok: { record } });
     }
 
     if (url.pathname.endsWith('/mailing/campaigns') && request.method === 'POST') {
