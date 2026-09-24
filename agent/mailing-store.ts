@@ -353,17 +353,6 @@ export async function prepareCampaign(input: {
   };
 }
 
-// TEMP diagnostics: remove once the "Not Found" send error is found.
-async function step<T>(name: string, run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`sendCampaign step "${name}" failed:`, error);
-    throw new Error(`[${name}] ${message}`);
-  }
-}
-
 export async function sendCampaign(input: {
   tableId: string;
   tableName: string;
@@ -374,7 +363,7 @@ export async function sendCampaign(input: {
   body: string;
   baseUrl: string;
 }): Promise<JsonMap> {
-  const recipients = await step('select recipients', () => selectRecipients(input.runId, input.segment));
+  const recipients = await selectRecipients(input.runId, input.segment);
   const campaignId = `camp-${Date.now()}`;
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
@@ -413,22 +402,22 @@ export async function sendCampaign(input: {
     });
   }
 
-  const delivery = await step('send emails', () => deliverMessages({
+  const delivery = await deliverMessages({
     messages,
     templateSubject: input.subject,
     templateBody: input.body,
     campaignId,
-  }));
+  });
   const sentEmails = new Set((delivery.sentEmails as string[]) || []);
   const kept = tokenRecords.filter((record) => sentEmails.has(String(record.object.email || '').trim().toLowerCase()));
-  if (kept.length) await step('save candidate links', () => structuredWrite(COLLECTIONS.mailingTokens, TYPES.mailingToken, kept));
+  if (kept.length) await structuredWrite(COLLECTIONS.mailingTokens, TYPES.mailingToken, kept);
 
   const limit = Number(delivery.dailyLimit || 50);
   const total = recipients.length;
   const sentCount = Number(delivery.sent || 0);
   const days = limit > 0 ? Math.max(0, Math.ceil(total / limit) - 1) : 0;
   const endsAt = new Date(Date.parse(createdAt) + days * 86400000).toISOString();
-  await step('save campaign', () => structuredWrite(COLLECTIONS.mailingCampaigns, TYPES.mailingCampaign, [{
+  await structuredWrite(COLLECTIONS.mailingCampaigns, TYPES.mailingCampaign, [{
     id: campaignId,
     object: {
       table_id: input.tableId,
@@ -447,7 +436,7 @@ export async function sendCampaign(input: {
       status: total > 0 && sentCount >= total ? 'complete' : 'running',
       send_note: 'Sending through Gmail within the daily limit.',
     },
-  }]));
+  }]);
 
   return { campaignId, recipientCount: recipients.length, ...delivery };
 }

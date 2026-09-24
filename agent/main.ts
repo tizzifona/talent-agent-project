@@ -184,7 +184,7 @@ async function handleRunMatching(request: Request): Promise<Response> {
 Deno.serve({ port: 0 }, async (request) => {
   const url = new URL(request.url);
   const path = url.pathname;
-  const isPlatformChat = (
+  const isPlatformChat = !path.includes('/mailing/') && (
     path.endsWith('/session')
     || path.endsWith('/send')
     || path.endsWith('/settings')
