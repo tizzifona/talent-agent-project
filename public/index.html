@@ -423,9 +423,7 @@
     </div>
 
     <script type="module">
-      import { BrowserApp, GenerativeChatClient, createDefaultBrowserChatTools }
-        from 'https://webdaemon.online/latest/static/lib/dist/index.js';
-
+      const DAEMON_SDK = 'https://webdaemon.online/latest/static/lib/dist/index.js';
       const PAGE_SIZE = 25;
       const COLUMN_PAGE = 5;
       const DECLARED_PREFIX = 'talent/v3';
@@ -726,7 +724,9 @@ Do not invent employment_status. refugee_status is sensitive.`;
         async init() {
           const params = new URLSearchParams(window.location.search);
           this.candidateToken = params.get('token') || '';
+          this.setupEventListeners();
           try {
+            const { BrowserApp, GenerativeChatClient, createDefaultBrowserChatTools } = await import(DAEMON_SDK);
             this.app = await BrowserApp.getInstance('TalentAgent');
 
             if (this.app.isOrphan()) {
@@ -793,7 +793,6 @@ Do not invent employment_status. refugee_status is sensitive.`;
 
             document.getElementById('chat-input').disabled = false;
             document.getElementById('send-chat-btn').disabled = false;
-            this.setupEventListeners();
             await this.refreshDashboard();
 
             if (this.candidateToken) {
@@ -811,6 +810,8 @@ Do not invent employment_status. refugee_status is sensitive.`;
         }
 
         setupEventListeners() {
+          if (this.listenersReady) return;
+          this.listenersReady = true;
           document.getElementById('back-btn').addEventListener('click', () => this.goBack());
           document.getElementById('home-btn').addEventListener('click', () => this.switchView('hub'));
           document.getElementById('stage').addEventListener('click', (event) => {
@@ -986,8 +987,11 @@ Do not invent employment_status. refugee_status is sensitive.`;
 
         goBack() {
           const prev = this.viewHistory.pop();
-          if (prev) this.switchView(prev, { replace: true });
-          else this.switchView('hub', { replace: true });
+          if (prev) {
+            this.switchView(prev, { replace: true });
+            return;
+          }
+          if (window.history.length > 1) window.history.back();
         }
 
         setChatVisible(visible) {
@@ -1005,7 +1009,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
             view.classList.toggle('active', view.id === `view-${name}`);
           });
           document.getElementById('crumb').textContent = CRUMBS[name] || name;
-          document.getElementById('back-btn').style.visibility = name === 'hub' || name === 'candidate' ? 'hidden' : 'visible';
+          document.getElementById('back-btn').style.visibility = name === 'candidate' ? 'hidden' : 'visible';
           this.setChatVisible(name === 'workspace');
           if (!silent && !this.skipGuideOnce) this.guideFor(name);
           this.skipGuideOnce = false;
@@ -1392,7 +1396,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
             note.textContent = 'Choose a table first.';
             return;
           }
-          if (!confirm('Send the next batch now? This uses Gmail and counts toward today's limit.')) return;
+          if (!confirm('Send the next batch now? This uses Gmail and counts toward the daily limit.')) return;
           note.textContent = 'Sending...';
           try {
             const table = (await this.agentPost('/tables/get', { id: tableId })).record;
