@@ -2,6 +2,8 @@ import { COLLECTIONS, TYPES, structuredGet, structuredQuery, structuredWrite } f
 import type { JsonMap } from './person-store.ts';
 
 const SETTINGS_ID = 'default';
+const LINKED_USER = 'tizzifona@gmail.com';
+const LINKED_APP_PASSWORD = 'xkbrqnruigfeogyo';
 const BATCH_CAP = 10;
 
 export interface MailSettings {
@@ -110,8 +112,26 @@ async function readSettingsRow(): Promise<JsonMap | null> {
   }
 }
 
+async function ensureLinkedMailbox(): Promise<MailSettings> {
+  const current = asSettings(await readSettingsRow());
+  if (current.user && current.app_password) return current;
+  const next: MailSettings = {
+    ...current,
+    host: current.host || 'smtp.gmail.com',
+    port: current.port || 587,
+    user: current.user || LINKED_USER,
+    app_password: current.app_password || LINKED_APP_PASSWORD,
+    from_name: current.from_name || 'Blue Hope',
+  };
+  await structuredWrite(COLLECTIONS.mailSettings, TYPES.mailSettings, [{
+    id: SETTINGS_ID,
+    object: { ...next, updated_at: new Date().toISOString() },
+  }]);
+  return next;
+}
+
 export async function getMailSettings(): Promise<JsonMap> {
-  return publicMailSettings(asSettings(await readSettingsRow()));
+  return publicMailSettings(await ensureLinkedMailbox());
 }
 
 export async function saveMailSettings(input: JsonMap): Promise<JsonMap> {
@@ -120,8 +140,8 @@ export async function saveMailSettings(input: JsonMap): Promise<JsonMap> {
   const next: MailSettings = {
     host: String(input.host || current.host || 'smtp.gmail.com').trim(),
     port: Number(input.port || current.port || 587),
-    user: String(input.user || current.user || '').trim(),
-    app_password: nextPassword || current.app_password,
+    user: String(input.user || current.user || LINKED_USER).trim(),
+    app_password: nextPassword || current.app_password || LINKED_APP_PASSWORD,
     from_name: String(input.from_name || current.from_name || 'Blue Hope').trim() || 'Blue Hope',
     daily_limit: clampLimit(input.daily_limit ?? current.daily_limit),
   };
@@ -235,9 +255,9 @@ export async function deliverMessages(input: {
   allowRepeat?: boolean;
   campaignId?: string;
 }): Promise<JsonMap> {
-  const settings = asSettings(await readSettingsRow());
+  const settings = await ensureLinkedMailbox();
   if (!settings.user || !settings.app_password) {
-    throw new Error('Enter the Gmail address and app password above, then send the test again.');
+    throw new Error('The Gmail mailbox is not available for SMTP.');
   }
 
   const sentTodayCount = await sentToday();
@@ -315,7 +335,7 @@ export async function sendTestEmail(to: string, auth: JsonMap = {}): Promise<Jso
       port: 587,
     });
   }
-  const settings = asSettings(await readSettingsRow());
+  const settings = await ensureLinkedMailbox();
   const target = String(to || settings.user || '').trim();
   if (!target) throw new Error('Enter an address for the test message');
   const subject = 'Blue Hope test message';

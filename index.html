@@ -249,17 +249,7 @@
           <p class="lede">Compose a message, then send it through Gmail. Each day stops at the limit you set, and the same template is not sent twice to the same address.</p>
           <section class="card">
             <h2>Sending account</h2>
-            <p class="upload-hint" id="smtp-status">Using the mailbox already connected for this daemon.</p>
-            <div class="settings-grid" id="smtp-connect">
-              <div class="setting-item">
-                <label for="smtp-user">Gmail address</label>
-                <input id="smtp-user" type="email" placeholder="name@gmail.com" autocomplete="off">
-              </div>
-              <div class="setting-item">
-                <label for="smtp-password">App password</label>
-                <input id="smtp-password" type="password" placeholder="Gmail app password" autocomplete="new-password">
-              </div>
-            </div>
+            <p class="upload-hint" id="smtp-status">Sending from the connected Gmail mailbox.</p>
             <div class="settings-grid">
               <div class="setting-item">
                 <label for="smtp-limit">Daily send limit</label>
@@ -1424,15 +1414,9 @@ Do not invent employment_status. refugee_status is sensitive.`;
         async loadMailSettings() {
           try {
             const settings = await this.agentPost('/mailing/settings', {});
-            this.mailPasswordSet = Boolean(settings.password_set);
             document.getElementById('smtp-limit').value = settings.daily_limit || 50;
-            const connect = document.getElementById('smtp-connect');
-            if (connect) connect.style.display = settings.password_set ? 'none' : '';
-            if (settings.user) document.getElementById('smtp-user').value = settings.user;
             const status = document.getElementById('smtp-status');
-            status.textContent = settings.password_set
-              ? `Sending from ${settings.user}. Daily limit ${settings.daily_limit}.`
-              : 'Enter the Gmail address and app password once. They stay in this daemon, not in the project files.';
+            status.textContent = `Sending from ${settings.user || 'the connected Gmail mailbox'}. Daily limit ${settings.daily_limit}.`;
           } catch (error) {
             document.getElementById('smtp-status').textContent = error.message;
           }
@@ -1457,14 +1441,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
           status.textContent = 'Sending test...';
           try {
             const to = document.getElementById('smtp-test-to').value.trim();
-            const result = await this.agentPost('/mailing/test', {
-              to,
-              user: document.getElementById('smtp-user')?.value.trim() || '',
-              app_password: document.getElementById('smtp-password')?.value || '',
-              daily_limit: Number(document.getElementById('smtp-limit').value || 50),
-            });
-            const password = document.getElementById('smtp-password');
-            if (password) password.value = '';
+            const result = await this.agentPost('/mailing/test', { to });
             await this.loadMailSettings();
             const problem = (result.errors || [])[0];
             status.textContent = result.sent
