@@ -36,6 +36,7 @@ import {
   listTemplates,
   prepareCampaign,
   reviewPendingUpdate,
+  deleteTemplate,
   saveTemplate,
   sendCampaign,
   submitTokenResponse,
@@ -299,6 +300,12 @@ Deno.serve({ port: 0 }, async (request) => {
 
     if (url.pathname.endsWith('/mailing/templates') && request.method === 'POST') {
       return response({ ok: { records: await listTemplates() } });
+    }
+
+    if (url.pathname.endsWith('/mailing/templates/delete') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'Template id required' });
+      return response({ ok: await deleteTemplate(String(body.id)) });
     }
 
     if (url.pathname.endsWith('/mailing/templates/save') && request.method === 'POST') {

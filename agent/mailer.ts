@@ -17,7 +17,37 @@ export interface OutboundMessage {
   email: string;
   subject: string;
   body: string;
+  html?: string;
   personId?: string;
+}
+
+export function brandedEmail(text: string, updateLink = '', optOutLink = ''): string {
+  const safe = String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  const paragraphs = safe
+    .split(/\n{2,}/)
+    .map((part) => `<p style="margin:0 0 16px;line-height:1.55;">${part.replace(/\n/g, '<br>')}</p>`)
+    .join('');
+  const button = (href: string, label: string, filled: boolean) => href
+    ? `<a href="${href}" style="display:inline-block;margin:8px 8px 0 0;padding:12px 18px;border-radius:10px;font-weight:700;text-decoration:none;${filled
+      ? 'background:#3bffc2;color:#0b1628;'
+      : 'background:transparent;color:#e8f0ff;border:1px solid #1e2d4a;'}">${label}</a>`
+    : '';
+  return `<!doctype html><html><body style="margin:0;padding:24px;background:#0b1628;color:#e8f0ff;font-family:Manrope,Segoe UI,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#121f38;border:1px solid #1e2d4a;border-radius:16px;">
+      <tr><td style="padding:28px 28px 8px;">
+        <img src="https://tizzifona.github.io/talent-agent-project/images/icon-heart.png" alt="Blue Hope" width="42" height="42" style="display:block;border-radius:10px;">
+        <p style="margin:14px 0 0;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#3bffc2;">Blue Hope</p>
+      </td></tr>
+      <tr><td style="padding:8px 28px 28px;font-size:16px;">
+        ${paragraphs}
+        ${button(updateLink, 'Yes, I want to update my data', true)}
+        ${button(optOutLink, 'No, I would like to stop working together', false)}
+      </td></tr>
+    </table>
+  </body></html>`;
 }
 
 function unwrap(record: JsonMap): JsonMap {
@@ -194,6 +224,7 @@ async function transmit(settings: MailSettings, message: OutboundMessage): Promi
     to: message.email,
     subject: message.subject,
     text: message.body,
+    html: message.html || brandedEmail(message.body),
   });
 }
 
