@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=10">
+    <link rel="stylesheet" href="app.css?v=11">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -137,12 +137,15 @@
         <section class="view" id="view-tables">
           <p class="page-kicker">Library</p>
           <h1>Saved tables</h1>
-          <p class="lede">Preview a table, rename it, start a new upload, or remove it from the library.</p>
+          <p class="lede">Open a table, or open a saved list to filter that table automatically.</p>
           <div class="btn-row">
             <button id="tables-upload-btn" class="primary-btn">Upload new files</button>
           </div>
           <div id="tables-empty" class="empty-state">No saved tables yet. Upload files to create the first one.</div>
           <div id="tables-list"></div>
+          <h2 class="library-heading">Saved lists</h2>
+          <div id="library-lists-empty" class="empty-state">No saved lists yet. Save a search from a working table.</div>
+          <div id="library-lists"></div>
         </section>
 
         <section class="view" id="view-workspace">
@@ -177,11 +180,10 @@
             </div>
             <p class="upload-hint">Search, country, and skills apply together. Separate skills with commas — a person must match every skill. Country matches any country you list.</p>
             <div class="list-bar">
-              <label for="people-lists">Saved lists</label>
+              <label for="people-lists">Filter by list</label>
               <select id="people-lists">
                 <option value="">All people in this table</option>
               </select>
-              <div id="saved-list-rows" class="saved-list-rows"></div>
             </div>
           </div>
           <div id="panel-people">
@@ -821,6 +823,10 @@ Do not invent employment_status. refugee_status is sensitive.`;
             if (!btn) return;
             this.handleTableAction(btn.dataset.tableId, btn.dataset.tableAction);
           });
+          document.getElementById('library-lists').addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-library-list]');
+            if (btn) this.openLibraryList(btn.dataset.libraryList);
+          });
           document.getElementById('workspace-subnav').addEventListener('click', (event) => {
             const button = event.target.closest('button[data-panel]');
             if (button) this.showWorkspacePanel(button.dataset.panel);
@@ -892,13 +898,6 @@ Do not invent employment_status. refugee_status is sensitive.`;
           });
           document.getElementById('people-save-list-btn').addEventListener('click', () => this.savePeopleList({}));
           document.getElementById('people-mail-btn').addEventListener('click', () => this.mailCurrentPeople());
-          document.getElementById('saved-list-rows').addEventListener('click', (event) => {
-            const button = event.target.closest('[data-open-list]');
-            if (!button) return;
-            const lists = document.getElementById('people-lists');
-            if (lists) lists.value = button.dataset.openList;
-            this.openSavedList(button.dataset.openList);
-          });
           document.getElementById('people-lists').addEventListener('change', (event) => {
             this.openSavedList(event.target.value);
           });
@@ -1380,17 +1379,6 @@ Do not invent employment_status. refugee_status is sensitive.`;
               select.value = current;
               if (select.value !== current) select.value = '';
             }
-            const rows = document.getElementById('saved-list-rows');
-            if (rows) {
-              const selected = selectId || this.activeList?.id || '';
-              rows.innerHTML = records.length
-                ? records.map((list) => `
-                    <button type="button" data-open-list="${escapeHtml(list.id)}" class="${list.id === selected ? 'active' : ''}">
-                      ${escapeHtml(list.name)} · ${escapeHtml(String(list.count || 0))} people
-                    </button>
-                  `).join('')
-                : '<p class="upload-hint">No saved lists yet. Ask the chat to save a search, or use Save as list.</p>';
-            }
             if (segment) {
               const current = segment.value;
               const builtin = [
@@ -1420,9 +1408,6 @@ Do not invent employment_status. refugee_status is sensitive.`;
           this.activeList = result.record || null;
           await this.loadPeople();
           this.rememberPlace();
-          document.querySelectorAll('#saved-list-rows [data-open-list]').forEach((button) => {
-            button.classList.toggle('active', button.dataset.openList === id);
-          });
         }
 
         async loadMailSettings() {
@@ -2112,10 +2097,9 @@ Do not invent employment_status. refugee_status is sensitive.`;
           if (!records.length) {
             empty.style.display = 'block';
             list.innerHTML = '';
-            return;
-          }
-          empty.style.display = 'none';
-          list.innerHTML = records.map((table) => `
+          } else {
+            empty.style.display = 'none';
+            list.innerHTML = records.map((table) => `
             <div class="table-row">
               <div class="table-meta">
                 <span class="table-name">${escapeHtml(table.name || 'Untitled')}</span>
@@ -2129,6 +2113,56 @@ Do not invent employment_status. refugee_status is sensitive.`;
               </div>
             </div>
           `).join('');
+          }
+          await this.renderLibraryLists();
+        }
+
+        async renderLibraryLists() {
+          const box = document.getElementById('library-lists');
+          const empty = document.getElementById('library-lists-empty');
+          if (!box || !empty) return;
+          try {
+            const result = await this.agentPost('/lists/list', {});
+            const records = result.records || [];
+            if (!records.length) {
+              empty.style.display = 'block';
+              box.innerHTML = '';
+              return;
+            }
+            empty.style.display = 'none';
+            box.innerHTML = records.map((list) => `
+              <div class="table-row">
+                <div class="table-meta">
+                  <span class="table-name">${escapeHtml(list.name || 'Untitled list')}</span>
+                  <span class="table-sub">${escapeHtml(String(list.count || 0))} people</span>
+                </div>
+                <div class="table-actions">
+                  <button class="action-btn" data-library-list="${escapeHtml(list.id)}">Open</button>
+                </div>
+              </div>
+            `).join('');
+          } catch (error) {
+            empty.style.display = 'block';
+            empty.textContent = error.message;
+            box.innerHTML = '';
+          }
+        }
+
+        async openLibraryList(id) {
+          const result = await this.agentPost('/lists/get', { id });
+          const list = result.record;
+          if (!list) return;
+          if (list.table_id) {
+            const table = await this.agentPost('/tables/get', { id: list.table_id });
+            if (table.record) this.currentTable = table.record;
+          }
+          this.activeList = list;
+          this.people.offset = 0;
+          this.workspacePanel = 'people';
+          if (list.search) document.getElementById('people-search').value = list.search;
+          if (list.country) document.getElementById('people-country').value = list.country;
+          if (list.skills) document.getElementById('people-skills').value = list.skills;
+          this.switchView('workspace');
         }
 
         async handleTableAction(id, action) {
