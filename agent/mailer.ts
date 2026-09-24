@@ -225,7 +225,25 @@ async function rememberSend(id: string, email: string, subject: string, campaign
   }]);
 }
 
+function relaxDenoEnv(): void {
+  const deno = (globalThis as {
+    Deno?: { env?: { get?: (key: string) => string | undefined; __talentRelaxed?: boolean } };
+  }).Deno;
+  const env = deno?.env;
+  if (!env || typeof env.get !== 'function' || env.__talentRelaxed) return;
+  const read = env.get.bind(env);
+  env.get = (key: string) => {
+    try {
+      return read(key);
+    } catch {
+      return undefined;
+    }
+  };
+  env.__talentRelaxed = true;
+}
+
 async function transmit(settings: MailSettings, message: OutboundMessage): Promise<void> {
+  relaxDenoEnv();
   const imported = await import('nodemailer');
   const nodemailer = (imported as { default?: { createTransport: (opts: JsonMap) => { sendMail: (msg: JsonMap) => Promise<unknown> } } }).default
     ?? (imported as { createTransport: (opts: JsonMap) => { sendMail: (msg: JsonMap) => Promise<unknown> } });
