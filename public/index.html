@@ -249,8 +249,12 @@
           <p class="lede">Compose a message, then send it through Gmail. Each day stops at the limit you set, and the same template is not sent twice to the same address.</p>
           <section class="card">
             <h2>Sending account</h2>
-            <p class="upload-hint" id="smtp-status">Sending from the connected Gmail mailbox.</p>
+            <p class="upload-hint" id="smtp-status">The test Gmail account sends the message. Send test to is only the inbox that receives it.</p>
             <div class="settings-grid">
+              <div class="setting-item">
+                <label for="smtp-user">Test Gmail that sends</label>
+                <input id="smtp-user" type="email" placeholder="the account that owns the app password" autocomplete="off">
+              </div>
               <div class="setting-item">
                 <label for="smtp-limit">Daily send limit</label>
                 <input id="smtp-limit" type="number" min="1" max="500" value="50">
@@ -1415,8 +1419,14 @@ Do not invent employment_status. refugee_status is sensitive.`;
           try {
             const settings = await this.agentPost('/mailing/settings', {});
             document.getElementById('smtp-limit').value = settings.daily_limit || 50;
+            const sender = document.getElementById('smtp-user');
+            if (sender && settings.user && settings.user.toLowerCase() !== 'tizzifona@gmail.com') {
+              sender.value = settings.user;
+            }
             const status = document.getElementById('smtp-status');
-            status.textContent = `Sending from ${settings.user || 'the connected Gmail mailbox'}. Daily limit ${settings.daily_limit}.`;
+            status.textContent = settings.user && settings.user.toLowerCase() !== 'tizzifona@gmail.com'
+              ? `Sending from ${settings.user}. Send test to only receives the message.`
+              : 'Enter the test Gmail address that owns the app password. tizzifona@gmail.com only receives the test.';
           } catch (error) {
             document.getElementById('smtp-status').textContent = error.message;
           }
@@ -1426,6 +1436,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
           const status = document.getElementById('smtp-status');
           try {
             const settings = await this.agentPost('/mailing/settings/save', {
+              user: document.getElementById('smtp-user').value.trim(),
               daily_limit: Number(document.getElementById('smtp-limit').value || 50),
               host: 'smtp.gmail.com',
               port: 587,
@@ -1441,7 +1452,10 @@ Do not invent employment_status. refugee_status is sensitive.`;
           status.textContent = 'Sending test...';
           try {
             const to = document.getElementById('smtp-test-to').value.trim();
-            const result = await this.agentPost('/mailing/test', { to });
+            const result = await this.agentPost('/mailing/test', {
+              to,
+              user: document.getElementById('smtp-user').value.trim(),
+            });
             await this.loadMailSettings();
             const problem = (result.errors || [])[0];
             status.textContent = result.sent
