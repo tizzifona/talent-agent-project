@@ -237,7 +237,7 @@ export async function deliverMessages(input: {
 }): Promise<JsonMap> {
   const settings = asSettings(await readSettingsRow());
   if (!settings.user || !settings.app_password) {
-    throw new Error('Save the Gmail address and app password in Email connection first.');
+    throw new Error('Enter the Gmail address and app password above, then send the test again.');
   }
 
   const sentTodayCount = await sentToday();
@@ -305,7 +305,16 @@ export async function deliverMessages(input: {
   };
 }
 
-export async function sendTestEmail(to: string): Promise<JsonMap> {
+export async function sendTestEmail(to: string, auth: JsonMap = {}): Promise<JsonMap> {
+  if (auth.user || auth.app_password) {
+    await saveMailSettings({
+      user: auth.user,
+      app_password: auth.app_password,
+      daily_limit: auth.daily_limit,
+      host: 'smtp.gmail.com',
+      port: 587,
+    });
+  }
   const settings = asSettings(await readSettingsRow());
   const target = String(to || settings.user || '').trim();
   if (!target) throw new Error('Enter an address for the test message');

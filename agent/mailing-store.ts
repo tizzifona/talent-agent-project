@@ -421,14 +421,20 @@ export async function sendCampaign(input: {
 }
 
 export async function listCampaigns(tableId?: string): Promise<JsonMap[]> {
-  const result = await structuredQuery(COLLECTIONS.mailingCampaigns, {
-    type: TYPES.mailingCampaign,
-    filter: tableId ? { table_id: tableId } : {},
-    select: ['*'],
-    order: 'created-desc',
-    limit: 50,
-  });
-  return result.records.map(unwrap);
+  try {
+    const result = await structuredQuery(COLLECTIONS.mailingCampaigns, {
+      type: TYPES.mailingCampaign,
+      filter: tableId ? { table_id: tableId } : {},
+      select: ['*'],
+      order: 'created-desc',
+      limit: 50,
+    });
+    return result.records.map(unwrap);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/not found/i.test(message)) return [];
+    throw error;
+  }
 }
 
 function tokenExpired(token: JsonMap): boolean {

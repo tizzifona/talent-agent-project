@@ -72,6 +72,7 @@ export async function savePeopleList(input: {
 export async function listPeopleLists(tableId?: string): Promise<JsonMap[]> {
   const rows = await queryLists();
   return rows
+    .filter((row) => !row.deleted)
     .filter((row) => !tableId || String(row.table_id || '') === tableId)
     .map((row) => ({
       id: row.id,
@@ -85,6 +86,26 @@ export async function listPeopleLists(tableId?: string): Promise<JsonMap[]> {
       preview: row.preview || [],
       created_at: row.created_at || '',
     }));
+}
+
+export async function renamePeopleList(id: string, name: string): Promise<JsonMap> {
+  const row = await getPeopleList(id);
+  const nextName = String(name || '').trim();
+  if (!row) throw new Error('List not found');
+  if (!nextName) throw new Error('List name is required');
+  const { id: rowId, ...object } = row;
+  object.name = nextName;
+  await structuredWrite(COLLECTIONS.peopleLists, TYPES.peopleList, [{ id: String(rowId), object }]);
+  return { id: rowId, ...object };
+}
+
+export async function deletePeopleList(id: string): Promise<JsonMap> {
+  const row = await getPeopleList(id);
+  if (!row) return { deleted: false };
+  const { id: rowId, ...object } = row;
+  object.deleted = true;
+  await structuredWrite(COLLECTIONS.peopleLists, TYPES.peopleList, [{ id: String(rowId), object }]);
+  return { deleted: true, id: rowId };
 }
 
 export async function getPeopleList(id: string): Promise<JsonMap | null> {
