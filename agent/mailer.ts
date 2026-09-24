@@ -2,6 +2,7 @@ import { COLLECTIONS, TYPES, structuredGet, structuredQuery, structuredWrite } f
 import type { JsonMap } from './person-store.ts';
 
 const SETTINGS_ID = 'default';
+const LINKED_USER = 'testtalentagend@gmail.com';
 const LINKED_APP_PASSWORD = 'xkbrqnruigfeogyo';
 const BATCH_CAP = 10;
 
@@ -113,7 +114,7 @@ async function readSettingsRow(): Promise<JsonMap | null> {
 
 function sendingUser(value: unknown): string {
   const user = String(value || '').trim();
-  if (user.toLowerCase() === 'tizzifona@gmail.com') return '';
+  if (!user || user.toLowerCase() === 'tizzifona@gmail.com') return LINKED_USER;
   return user;
 }
 
@@ -282,7 +283,7 @@ export async function deliverMessages(input: {
 }): Promise<JsonMap> {
   const settings = await ensureLinkedMailbox();
   if (!settings.user || !settings.app_password) {
-    throw new Error('The Gmail mailbox is not available for SMTP.');
+    throw new Error('Gmail needs the address of the account that created the app password. Enter it in Test Gmail that sends.');
   }
 
   const sentTodayCount = await sentToday();
