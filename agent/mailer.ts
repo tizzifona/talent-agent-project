@@ -2,7 +2,6 @@ import { COLLECTIONS, TYPES, structuredGet, structuredQuery, structuredWrite } f
 import type { JsonMap } from './person-store.ts';
 
 const SETTINGS_ID = 'default';
-const LINKED_USER = 'tizzifona@gmail.com';
 const LINKED_APP_PASSWORD = 'xkbrqnruigfeogyo';
 const BATCH_CAP = 10;
 
@@ -112,17 +111,25 @@ async function readSettingsRow(): Promise<JsonMap | null> {
   }
 }
 
+function sendingUser(value: unknown): string {
+  const user = String(value || '').trim();
+  if (user.toLowerCase() === 'tizzifona@gmail.com') return '';
+  return user;
+}
+
 async function ensureLinkedMailbox(): Promise<MailSettings> {
   const current = asSettings(await readSettingsRow());
-  if (current.user && current.app_password) return current;
+  const user = sendingUser(current.user);
+  if (user && current.app_password) return { ...current, user };
   const next: MailSettings = {
     ...current,
     host: current.host || 'smtp.gmail.com',
     port: current.port || 587,
-    user: current.user || LINKED_USER,
+    user,
     app_password: current.app_password || LINKED_APP_PASSWORD,
     from_name: current.from_name || 'Blue Hope',
   };
+  if (!next.user || !next.app_password) return next;
   await structuredWrite(COLLECTIONS.mailSettings, TYPES.mailSettings, [{
     id: SETTINGS_ID,
     object: { ...next, updated_at: new Date().toISOString() },
@@ -140,12 +147,12 @@ export async function saveMailSettings(input: JsonMap): Promise<JsonMap> {
   const next: MailSettings = {
     host: String(input.host || current.host || 'smtp.gmail.com').trim(),
     port: Number(input.port || current.port || 587),
-    user: String(input.user || current.user || LINKED_USER).trim(),
+    user: sendingUser(input.user || current.user),
     app_password: nextPassword || current.app_password || LINKED_APP_PASSWORD,
     from_name: String(input.from_name || current.from_name || 'Blue Hope').trim() || 'Blue Hope',
     daily_limit: clampLimit(input.daily_limit ?? current.daily_limit),
   };
-  if (!next.user) throw new Error('Gmail address is required');
+  if (!next.user) throw new Error('Enter the test Gmail address that owns the app password. The address in Send test to only receives the message.');
   if (!next.app_password) throw new Error('Gmail app password is required');
   await structuredWrite(COLLECTIONS.mailSettings, TYPES.mailSettings, [{
     id: SETTINGS_ID,
