@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=9">
+    <link rel="stylesheet" href="app.css?v=10">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -181,6 +181,7 @@
               <select id="people-lists">
                 <option value="">All people in this table</option>
               </select>
+              <div id="saved-list-rows" class="saved-list-rows"></div>
             </div>
           </div>
           <div id="panel-people">
@@ -211,7 +212,7 @@
                 <label class="inline-check" title="Refugee status is sensitive and is left out of exported files by default">
                   <input type="checkbox" id="export-sensitive"> Include refugee status
                 </label>
-                <button data-view="mailing" class="primary-btn">Continue to mailing</button>
+                <button id="people-mail-btn" class="primary-btn" type="button">Continue to mailing</button>
               </div>
             </section>
           </div>
@@ -253,35 +254,22 @@
           <h1>Mailing campaign</h1>
           <p class="lede">Compose a message, then send it through Gmail. Each day stops at the limit you set, and the same template is not sent twice to the same address.</p>
           <section class="card">
-            <h2>Email connection</h2>
-            <p class="upload-hint">Use a Gmail address with an app password. The password is stored in this daemon only, not in the project files. Start with a low daily limit so the mailbox is not blocked.</p>
+            <h2>Sending account</h2>
+            <p class="upload-hint" id="smtp-status">Using the mailbox already connected for this daemon.</p>
             <div class="settings-grid">
-              <div class="setting-item">
-                <label for="smtp-user">Gmail address</label>
-                <input id="smtp-user" type="email" placeholder="name@gmail.com" autocomplete="off">
-              </div>
-              <div class="setting-item">
-                <label for="smtp-password">App password</label>
-                <input id="smtp-password" type="password" placeholder="Leave blank to keep the saved password" autocomplete="new-password">
-              </div>
-              <div class="setting-item">
-                <label for="smtp-from">From name</label>
-                <input id="smtp-from" type="text" value="Blue Hope">
-              </div>
               <div class="setting-item">
                 <label for="smtp-limit">Daily send limit</label>
                 <input id="smtp-limit" type="number" min="1" max="500" value="50">
               </div>
               <div class="setting-item">
                 <label for="smtp-test-to">Send test to</label>
-                <input id="smtp-test-to" type="email" placeholder="Same as the Gmail address if empty">
+                <input id="smtp-test-to" type="email" placeholder="Your own inbox">
               </div>
             </div>
             <div class="btn-row">
-              <button id="smtp-save-btn" class="secondary-btn" type="button">Save email connection</button>
+              <button id="smtp-save-btn" class="secondary-btn" type="button">Save daily limit</button>
               <button id="smtp-test-btn" class="primary-btn" type="button">Send test email</button>
             </div>
-            <p class="upload-hint" id="smtp-status">Not connected yet.</p>
           </section>
           <section class="card">
             <div class="settings-grid">
@@ -725,6 +713,15 @@ Do not invent employment_status. refugee_status is sensitive.`;
           const params = new URLSearchParams(window.location.search);
           this.candidateToken = params.get('token') || '';
           this.setupEventListeners();
+          const saved = this.readPlace();
+          if (!this.candidateToken && saved?.view && saved.view !== 'hub') {
+            if (saved.search != null) document.getElementById('people-search').value = saved.search;
+            if (saved.country != null) document.getElementById('people-country').value = saved.country;
+            if (saved.skills != null) document.getElementById('people-skills').value = saved.skills;
+            this.workspacePanel = saved.panel || 'people';
+            this.viewHistory = ['hub'];
+            this.switchView(saved.view, { replace: true, silent: true, skipLoad: true });
+          }
           try {
             const { BrowserApp, GenerativeChatClient, createDefaultBrowserChatTools } = await import(DAEMON_SDK);
             this.app = await BrowserApp.getInstance('TalentAgent');
@@ -799,7 +796,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
               this.switchView('candidate', { replace: true, silent: true });
               await this.loadCandidatePortal();
             } else {
-              this.switchView('hub', { replace: true, silent: true });
+              await this.restorePlace();
             }
           } catch (error) {
             console.error('Initialization error:', error);
@@ -894,6 +891,14 @@ Do not invent employment_status. refugee_status is sensitive.`;
             this.reloadWorkspaceList();
           });
           document.getElementById('people-save-list-btn').addEventListener('click', () => this.savePeopleList({}));
+          document.getElementById('people-mail-btn').addEventListener('click', () => this.mailCurrentPeople());
+          document.getElementById('saved-list-rows').addEventListener('click', (event) => {
+            const button = event.target.closest('[data-open-list]');
+            if (!button) return;
+            const lists = document.getElementById('people-lists');
+            if (lists) lists.value = button.dataset.openList;
+            this.openSavedList(button.dataset.openList);
+          });
           document.getElementById('people-lists').addEventListener('change', (event) => {
             this.openSavedList(event.target.value);
           });
@@ -985,6 +990,60 @@ Do not invent employment_status. refugee_status is sensitive.`;
           });
         }
 
+        readPlace() {
+          try {
+            return JSON.parse(sessionStorage.getItem('bh-talent-place') || 'null');
+          } catch {
+            return null;
+          }
+        }
+
+        rememberPlace() {
+          const segment = document.getElementById('mailing-segment');
+          const place = {
+            view: this.currentView,
+            tableId: this.currentTable?.id || '',
+            listId: this.activeList?.id || '',
+            panel: this.workspacePanel || 'people',
+            search: document.getElementById('people-search')?.value || '',
+            country: document.getElementById('people-country')?.value || '',
+            skills: document.getElementById('people-skills')?.value || '',
+            segment: segment?.value || '',
+          };
+          sessionStorage.setItem('bh-talent-place', JSON.stringify(place));
+        }
+
+        async restorePlace() {
+          const place = this.readPlace();
+          if (!place?.view || place.view === 'hub' || place.view === 'candidate') {
+            this.switchView('hub', { replace: true, silent: true });
+            return;
+          }
+          if (place.tableId) {
+            try {
+              const result = await this.agentPost('/tables/get', { id: place.tableId });
+              this.currentTable = result.record || this.currentTable;
+            } catch (error) {
+              console.error('Could not reopen the table:', error);
+            }
+          }
+          if (place.search != null) document.getElementById('people-search').value = place.search;
+          if (place.country != null) document.getElementById('people-country').value = place.country;
+          if (place.skills != null) document.getElementById('people-skills').value = place.skills;
+          this.workspacePanel = place.panel || 'people';
+          if (place.listId && this.currentTable) {
+            try {
+              const result = await this.agentPost('/lists/get', { id: place.listId });
+              this.activeList = result.record || null;
+            } catch (error) {
+              console.error('Could not reopen the list:', error);
+            }
+          }
+          if (place.segment) this.pendingSegment = place.segment;
+          this.viewHistory = ['hub'];
+          this.switchView(place.view, { replace: true, silent: true });
+        }
+
         goBack() {
           const prev = this.viewHistory.pop();
           if (prev) {
@@ -999,7 +1058,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
         }
 
         switchView(name, options = {}) {
-          const { replace = false, silent = false } = options;
+          const { replace = false, silent = false, skipLoad = false } = options;
           if (!replace && this.currentView && this.currentView !== name) {
             this.viewHistory.push(this.currentView);
             if (this.viewHistory.length > 30) this.viewHistory.shift();
@@ -1013,13 +1072,11 @@ Do not invent employment_status. refugee_status is sensitive.`;
           this.setChatVisible(name === 'workspace');
           if (!silent && !this.skipGuideOnce) this.guideFor(name);
           this.skipGuideOnce = false;
-          if (name === 'tables') this.loadTables();
-          if (name === 'workspace') {
-            this.showWorkspacePanel('people');
-            this.loadPeople();
-          }
-          if (name === 'mailing') this.loadMailing();
-          if (name === 'candidate' && this.candidateToken) this.loadCandidatePortal();
+          if (!skipLoad && name === 'tables') this.loadTables();
+          if (!skipLoad && name === 'workspace') this.showWorkspacePanel(this.workspacePanel || 'people');
+          if (!skipLoad && name === 'mailing') this.loadMailing();
+          if (!skipLoad && name === 'candidate' && this.candidateToken) this.loadCandidatePortal();
+          if (!skipLoad) this.rememberPlace();
         }
 
         guideFor(name) {
@@ -1041,6 +1098,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
           document.getElementById('panel-approvals').classList.toggle('hidden', panel !== 'approvals');
           document.getElementById('workspace-filters').classList.toggle('hidden', panel === 'approvals');
           document.getElementById('people-add-btn').style.display = panel === 'people' ? '' : 'none';
+          this.rememberPlace();
           if (panel === 'review') return this.loadReview();
           if (panel === 'people') {
             this.loadSavedLists();
@@ -1050,6 +1108,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
         }
 
         reloadWorkspaceList() {
+          this.rememberPlace();
           if (this.workspacePanel === 'review') this.loadReview();
           else this.loadPeople();
         }
@@ -1278,9 +1337,32 @@ Do not invent employment_status. refugee_status is sensitive.`;
             ids: this.activeList?.person_ids,
           });
           const record = result.record || {};
+          const full = await this.agentPost('/lists/get', { id: record.id });
+          this.activeList = full.record || record;
           await this.loadSavedLists(record.id);
+          if (this.currentView !== 'workspace') {
+            this.switchView('workspace', { replace: true, silent: true });
+          } else {
+            await this.showWorkspacePanel('people');
+          }
+          const lists = document.getElementById('people-lists');
+          if (lists) lists.value = record.id || '';
           this.addChatMessage('assistant', `Saved list “${record.name}” with ${record.count || 0} people.`);
+          this.rememberPlace();
           return { saved: true, id: record.id, name: record.name, count: record.count || 0 };
+        }
+
+        async mailCurrentPeople() {
+          if (!this.currentTable?.run_id) {
+            this.showError('Open a saved table first');
+            return;
+          }
+          const name = window.prompt('Name the list to mail');
+          if (!name || !String(name).trim()) return;
+          const saved = await this.savePeopleList({ name: String(name).trim() });
+          if (!saved?.id) return;
+          this.pendingSegment = `list:${saved.id}`;
+          this.switchView('mailing');
         }
 
         async loadSavedLists(selectId = '') {
@@ -1291,12 +1373,23 @@ Do not invent employment_status. refugee_status is sensitive.`;
             const result = await this.agentPost('/lists/list', { tableId: this.currentTable.id });
             const records = result.records || [];
             if (select) {
-              const current = selectId || select.value;
+              const current = selectId || this.activeList?.id || select.value;
               select.innerHTML = '<option value="">All people in this table</option>' + records.map((list) => (
                 `<option value="${escapeHtml(list.id)}">${escapeHtml(list.name)} (${list.count || 0})</option>`
               )).join('');
               select.value = current;
               if (select.value !== current) select.value = '';
+            }
+            const rows = document.getElementById('saved-list-rows');
+            if (rows) {
+              const selected = selectId || this.activeList?.id || '';
+              rows.innerHTML = records.length
+                ? records.map((list) => `
+                    <button type="button" data-open-list="${escapeHtml(list.id)}" class="${list.id === selected ? 'active' : ''}">
+                      ${escapeHtml(list.name)} · ${escapeHtml(String(list.count || 0))} people
+                    </button>
+                  `).join('')
+                : '<p class="upload-hint">No saved lists yet. Ask the chat to save a search, or use Save as list.</p>';
             }
             if (segment) {
               const current = segment.value;
@@ -1326,19 +1419,20 @@ Do not invent employment_status. refugee_status is sensitive.`;
           const result = await this.agentPost('/lists/get', { id });
           this.activeList = result.record || null;
           await this.loadPeople();
+          this.rememberPlace();
+          document.querySelectorAll('#saved-list-rows [data-open-list]').forEach((button) => {
+            button.classList.toggle('active', button.dataset.openList === id);
+          });
         }
 
         async loadMailSettings() {
           try {
             const settings = await this.agentPost('/mailing/settings', {});
-            document.getElementById('smtp-user').value = settings.user || '';
-            document.getElementById('smtp-from').value = settings.from_name || 'Blue Hope';
             document.getElementById('smtp-limit').value = settings.daily_limit || 50;
-            document.getElementById('smtp-password').value = '';
             const status = document.getElementById('smtp-status');
             status.textContent = settings.password_set
-              ? `Connected as ${settings.user}. Daily limit ${settings.daily_limit}. App password is saved.`
-              : 'Add the Gmail address and app password, then send a test.';
+              ? `Sending from ${settings.user}. Daily limit ${settings.daily_limit}.`
+              : 'The sending mailbox is not stored in this daemon yet.';
           } catch (error) {
             document.getElementById('smtp-status').textContent = error.message;
           }
@@ -1348,15 +1442,11 @@ Do not invent employment_status. refugee_status is sensitive.`;
           const status = document.getElementById('smtp-status');
           try {
             const settings = await this.agentPost('/mailing/settings/save', {
-              user: document.getElementById('smtp-user').value.trim(),
-              app_password: document.getElementById('smtp-password').value,
-              from_name: document.getElementById('smtp-from').value.trim(),
               daily_limit: Number(document.getElementById('smtp-limit').value || 50),
               host: 'smtp.gmail.com',
               port: 587,
             });
-            document.getElementById('smtp-password').value = '';
-            status.textContent = `Saved for ${settings.user}. Daily limit ${settings.daily_limit}. Send a test before a campaign.`;
+            status.textContent = `Sending from ${settings.user}. Daily limit ${settings.daily_limit}.`;
           } catch (error) {
             status.textContent = error.message;
           }
@@ -2092,6 +2182,16 @@ Do not invent employment_status. refugee_status is sensitive.`;
           await this.loadPendingUpdates('mailing-pending');
           await this.loadMailSettings();
           await this.loadSavedLists();
+          if (this.pendingSegment) {
+            const segment = document.getElementById('mailing-segment');
+            const wanted = this.pendingSegment;
+            this.pendingSegment = '';
+            if ([...segment.options].some((option) => option.value === wanted)) {
+              segment.value = wanted;
+              await this.refreshMailingCount();
+            }
+          }
+          this.rememberPlace();
         }
 
         async loadTemplates() {

@@ -90,7 +90,7 @@ export async function saveMailSettings(input: JsonMap): Promise<JsonMap> {
   const next: MailSettings = {
     host: String(input.host || current.host || 'smtp.gmail.com').trim(),
     port: Number(input.port || current.port || 587),
-    user: String(input.user || '').trim(),
+    user: String(input.user || current.user || '').trim(),
     app_password: nextPassword || current.app_password,
     from_name: String(input.from_name || current.from_name || 'Blue Hope').trim() || 'Blue Hope',
     daily_limit: clampLimit(input.daily_limit ?? current.daily_limit),

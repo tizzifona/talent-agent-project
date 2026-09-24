@@ -202,6 +202,28 @@ body {
   gap: 16px;
 }
 
+.saved-list-rows {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.saved-list-rows button {
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.saved-list-rows button.active {
+  border-color: var(--teal);
+  color: var(--teal);
+}
+
 .choice-card,
 .intro-item,
 .card {
