@@ -250,6 +250,16 @@
           <section class="card">
             <h2>Sending account</h2>
             <p class="upload-hint" id="smtp-status">Using the mailbox already connected for this daemon.</p>
+            <div class="settings-grid" id="smtp-connect">
+              <div class="setting-item">
+                <label for="smtp-user">Gmail address</label>
+                <input id="smtp-user" type="email" placeholder="name@gmail.com" autocomplete="off">
+              </div>
+              <div class="setting-item">
+                <label for="smtp-password">App password</label>
+                <input id="smtp-password" type="password" placeholder="Gmail app password" autocomplete="new-password">
+              </div>
+            </div>
             <div class="settings-grid">
               <div class="setting-item">
                 <label for="smtp-limit">Daily send limit</label>
@@ -826,8 +836,8 @@ Do not invent employment_status. refugee_status is sensitive.`;
             this.handleTableAction(btn.dataset.tableId, btn.dataset.tableAction);
           });
           document.getElementById('library-lists').addEventListener('click', (event) => {
-            const btn = event.target.closest('[data-library-list]');
-            if (btn) this.openLibraryList(btn.dataset.libraryList);
+            const btn = event.target.closest('[data-library-action]');
+            if (btn) this.handleLibraryList(btn.dataset.libraryList, btn.dataset.libraryAction);
           });
           document.getElementById('workspace-subnav').addEventListener('click', (event) => {
             const button = event.target.closest('button[data-panel]');
@@ -1414,11 +1424,15 @@ Do not invent employment_status. refugee_status is sensitive.`;
         async loadMailSettings() {
           try {
             const settings = await this.agentPost('/mailing/settings', {});
+            this.mailPasswordSet = Boolean(settings.password_set);
             document.getElementById('smtp-limit').value = settings.daily_limit || 50;
+            const connect = document.getElementById('smtp-connect');
+            if (connect) connect.style.display = settings.password_set ? 'none' : '';
+            if (settings.user) document.getElementById('smtp-user').value = settings.user;
             const status = document.getElementById('smtp-status');
             status.textContent = settings.password_set
               ? `Sending from ${settings.user}. Daily limit ${settings.daily_limit}.`
-              : 'The sending mailbox is not stored in this daemon yet.';
+              : 'Enter the Gmail address and app password once. They stay in this daemon, not in the project files.';
           } catch (error) {
             document.getElementById('smtp-status').textContent = error.message;
           }
@@ -1443,7 +1457,15 @@ Do not invent employment_status. refugee_status is sensitive.`;
           status.textContent = 'Sending test...';
           try {
             const to = document.getElementById('smtp-test-to').value.trim();
-            const result = await this.agentPost('/mailing/test', { to });
+            const result = await this.agentPost('/mailing/test', {
+              to,
+              user: document.getElementById('smtp-user')?.value.trim() || '',
+              app_password: document.getElementById('smtp-password')?.value || '',
+              daily_limit: Number(document.getElementById('smtp-limit').value || 50),
+            });
+            const password = document.getElementById('smtp-password');
+            if (password) password.value = '';
+            await this.loadMailSettings();
             const problem = (result.errors || [])[0];
             status.textContent = result.sent
               ? `Test sent. ${result.remainingToday} left in today's limit.`
@@ -2138,7 +2160,10 @@ Do not invent employment_status. refugee_status is sensitive.`;
                   <span class="table-sub">${escapeHtml(String(list.count || 0))} people</span>
                 </div>
                 <div class="table-actions">
-                  <button class="action-btn" data-library-list="${escapeHtml(list.id)}">Open</button>
+                  <button class="action-btn" data-library-action="open" data-library-list="${escapeHtml(list.id)}">Open</button>
+                  <button class="action-btn" data-library-action="rename" data-library-list="${escapeHtml(list.id)}">Rename</button>
+                  <button class="action-btn" data-library-action="mailing" data-library-list="${escapeHtml(list.id)}">Mailing</button>
+                  <button class="action-btn danger" data-library-action="delete" data-library-list="${escapeHtml(list.id)}">Delete</button>
                 </div>
               </div>
             `).join('');
@@ -2146,6 +2171,43 @@ Do not invent employment_status. refugee_status is sensitive.`;
             empty.style.display = 'block';
             empty.textContent = error.message;
             box.innerHTML = '';
+          }
+        }
+
+        async handleLibraryList(id, action) {
+          if (!id || !action) return;
+          try {
+            if (action === 'open') {
+              await this.openLibraryList(id);
+              return;
+            }
+            if (action === 'rename') {
+              const next = window.prompt('New list name');
+              if (!next || !next.trim()) return;
+              await this.agentPost('/lists/rename', { id, name: next.trim() });
+              await this.renderLibraryLists();
+              return;
+            }
+            if (action === 'delete') {
+              if (!confirm('Delete this list? The people stay in the database.')) return;
+              await this.agentPost('/lists/delete', { id });
+              if (this.activeList?.id === id) this.activeList = null;
+              await this.renderLibraryLists();
+              return;
+            }
+            if (action === 'mailing') {
+              const result = await this.agentPost('/lists/get', { id });
+              const list = result.record;
+              if (!list) return;
+              if (list.table_id) {
+                const table = await this.agentPost('/tables/get', { id: list.table_id });
+                if (table.record) this.currentTable = table.record;
+              }
+              this.pendingSegment = `list:${id}`;
+              this.switchView('mailing');
+            }
+          } catch (error) {
+            this.showError(error.message);
           }
         }
 
@@ -2502,16 +2564,23 @@ Do not invent employment_status. refugee_status is sensitive.`;
             const table = (await this.agentPost('/tables/get', { id: tableId })).record;
             if (!table) throw new Error('Table not found');
             this.currentTable = table;
+            if (segment.startsWith('list:')) {
+              const list = (await this.agentPost('/lists/get', { id: segment.slice(5) })).record;
+              const count = Number(list?.count || (list?.person_ids || []).length || 0);
+              label.textContent = `${count} ${count === 1 ? 'person' : 'people'} in “${list?.name || 'this list'}” will receive this mailing.`;
+              return;
+            }
             const query = { runId: table.run_id, heldOut: false, limit: 1, offset: 0 };
             if (segment === 'review') query.needsReview = true;
             if (segment === 'employment') query.search = 'unknown';
             const result = await this.agentPost('/persons/query', query);
+            const count = result.count || 0;
             const names = {
-              all: 'people in the working table',
-              review: 'people still needing review',
-              employment: 'rows matching unknown employment (approximate until that field is filled)',
+              all: 'in this database',
+              review: 'still needing review',
+              employment: 'with unknown employment',
             };
-            label.textContent = `${result.count || 0} ${names[segment] || 'people'} in “${table.name}”. Prepare campaign to create 3-day links.`;
+            label.textContent = `${count} ${count === 1 ? 'person' : 'people'} ${names[segment] || ''} will receive this mailing.`;
           } catch (error) {
             label.textContent = error.message;
           }

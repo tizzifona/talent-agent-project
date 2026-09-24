@@ -41,7 +41,7 @@ import {
   sendCampaign,
   submitTokenResponse,
 } from './mailing-store.ts';
-import { getPeopleList, listPeopleLists, savePeopleList } from './list-store.ts';
+import { deletePeopleList, getPeopleList, listPeopleLists, renamePeopleList, savePeopleList } from './list-store.ts';
 import { getMailSettings, saveMailSettings, sendTestEmail } from './mailer.ts';
 
 const systemPrompt = `You are the on-screen assistant for Blue Hope Talent Agent.
@@ -336,7 +336,19 @@ Deno.serve({ port: 0 }, async (request) => {
 
     if (url.pathname.endsWith('/mailing/test') && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
-      return response({ ok: await sendTestEmail(String(body?.to || '')) });
+      return response({ ok: await sendTestEmail(String(body?.to || ''), body || {}) });
+    }
+
+    if (url.pathname.endsWith('/lists/rename') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'List id required' });
+      return response({ ok: { record: await renamePeopleList(String(body.id), String(body.name || '')) } });
+    }
+
+    if (url.pathname.endsWith('/lists/delete') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'List id required' });
+      return response({ ok: await deletePeopleList(String(body.id)) });
     }
 
     if (url.pathname.endsWith('/lists/save') && request.method === 'POST') {
