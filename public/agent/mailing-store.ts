@@ -13,7 +13,7 @@ import {
   type JsonMap,
 } from './person-store.ts';
 import { getPeopleList } from './list-store.ts';
-import { deliverMessages } from './mailer.ts';
+import { brandedEmail, deliverMessages } from './mailer.ts';
 
 const TOKEN_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -52,18 +52,13 @@ export const EDITABLE_PERSON_FIELDS = [
 const DEFAULT_TEMPLATES: Array<{ id: string; name: string; subject: string; body: string }> = [
   {
     id: 'tpl-reengage',
-    name: 'Re-engagement check-in',
-    subject: 'Still interested in Blue Hope opportunities?',
-    body: `Hi {{first_name}},
+    name: 'Talent database update',
+    subject: 'Are you interested in working with Blue Hope?',
+    body: `Hello {{first_name}}!
 
-We are checking in from Blue Hope. Your profile is still in our talent table.
+Blue Hope is updating its talent database, and we would like to know if you are interested in continuing to work with us and take part in our projects.
 
-Use this private link to update your details or leave the database:
-{{update_link}}
-
-The link stays open for 3 days.
-
-Blue Hope team`,
+If you are, please take a couple of minutes to update your information. That helps us look for projects that fit you better.`,
   },
   {
     id: 'tpl-update',
@@ -158,35 +153,57 @@ function renderTemplate(text: string, person: JsonMap, updateLink: string): stri
     job_title: String(person.job_title || ''),
     technical_skills: String(person.technical_skills || ''),
     update_link: updateLink,
+    opt_out_link: updateLink.includes('token=')
+      ? `${updateLink}${updateLink.includes('?') ? '&' : '?'}intent=opt_out`
+      : updateLink,
   };
   return text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => values[key] ?? '');
 }
 
 export async function ensureDefaultTemplates(): Promise<JsonMap[]> {
-  const existing = await structuredQuery(COLLECTIONS.mailingTemplates, {
-    type: TYPES.mailingTemplate,
-    select: ['*'],
-    limit: 50,
-  });
-  if (existing.count > 0) {
-    return existing.records.map(unwrap).sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  let rows: JsonMap[] = [];
+  try {
+    const existing = await structuredQuery(COLLECTIONS.mailingTemplates, {
+      type: TYPES.mailingTemplate,
+      select: ['*'],
+      limit: 50,
+    });
+    rows = existing.records.map(unwrap);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/not found/i.test(message)) throw error;
   }
+  const visible = rows.filter((row) => !row.deleted);
+  const byId = new Map(visible.map((row) => [String(row.id), row]));
   const now = new Date().toISOString();
-  await structuredWrite(
-    COLLECTIONS.mailingTemplates,
-    TYPES.mailingTemplate,
-    DEFAULT_TEMPLATES.map((tpl) => ({
-      id: tpl.id,
-      object: {
-        name: tpl.name,
-        subject: tpl.subject,
-        body: tpl.body,
-        created_at: now,
-        updated_at: now,
-      },
-    })),
-  );
-  return DEFAULT_TEMPLATES.map((tpl) => ({ ...tpl, created_at: now, updated_at: now }));
+  const writes = DEFAULT_TEMPLATES.filter((tpl) => tpl.id === 'tpl-reengage' || !byId.has(tpl.id)).map((tpl) => ({
+    id: tpl.id,
+    object: {
+      name: tpl.name,
+      subject: tpl.subject,
+      body: tpl.body,
+      created_at: byId.get(tpl.id)?.created_at || now,
+      updated_at: now,
+      deleted: false,
+    },
+  }));
+  if (writes.length) {
+    await structuredWrite(COLLECTIONS.mailingTemplates, TYPES.mailingTemplate, writes);
+  }
+  const merged = new Map(visible.map((row) => [String(row.id), row]));
+  for (const write of writes) merged.set(write.id, { id: write.id, ...write.object });
+  return [...merged.values()].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+}
+
+export async function deleteTemplate(id: string): Promise<JsonMap> {
+  const existing = await structuredGet(COLLECTIONS.mailingTemplates, id);
+  if (!existing) return { deleted: false };
+  const prev = unwrap(existing);
+  await structuredWrite(COLLECTIONS.mailingTemplates, TYPES.mailingTemplate, [{
+    id,
+    object: { ...prev, deleted: true, updated_at: new Date().toISOString() },
+  }]);
+  return { deleted: true, id };
 }
 
 export async function listTemplates(): Promise<JsonMap[]> {
@@ -330,13 +347,15 @@ export async function sendCampaign(input: {
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
   const base = String(input.baseUrl || '').replace(/[?#].*$/, '').replace(/\/$/, '');
-  const messages: Array<{ email: string; subject: string; body: string; personId: string }> = [];
+  const messages: Array<{ email: string; subject: string; body: string; html?: string; personId: string }> = [];
   const tokenRecords: Array<{ id: string; object: JsonMap }> = [];
 
   for (const person of recipients) {
     const token = randomToken();
     const updateLink = `${base}?token=${token}`;
+    const optOutLink = `${updateLink}&intent=opt_out`;
     const email = String(person.primary_email || '').trim();
+    const text = renderTemplate(input.body, person, updateLink);
     tokenRecords.push({
       id: token,
       object: {
@@ -357,7 +376,8 @@ export async function sendCampaign(input: {
       personId: String(person.id || ''),
       email,
       subject: renderTemplate(input.subject, person, updateLink),
-      body: renderTemplate(input.body, person, updateLink),
+      body: text,
+      html: brandedEmail(text, updateLink, optOutLink),
     });
   }
 
@@ -371,6 +391,11 @@ export async function sendCampaign(input: {
   const kept = tokenRecords.filter((record) => sentEmails.has(String(record.object.email || '').trim().toLowerCase()));
   if (kept.length) await structuredWrite(COLLECTIONS.mailingTokens, TYPES.mailingToken, kept);
 
+  const limit = Number(delivery.dailyLimit || 50);
+  const total = recipients.length;
+  const sentCount = Number(delivery.sent || 0);
+  const days = limit > 0 ? Math.max(0, Math.ceil(total / limit) - 1) : 0;
+  const endsAt = new Date(Date.parse(createdAt) + days * 86400000).toISOString();
   await structuredWrite(COLLECTIONS.mailingCampaigns, TYPES.mailingCampaign, [{
     id: campaignId,
     object: {
@@ -381,11 +406,14 @@ export async function sendCampaign(input: {
       template_id: input.templateId,
       subject: input.subject,
       body: input.body,
-      recipient_count: recipients.length,
-      sent_count: delivery.sent,
+      recipient_count: total,
+      sent_count: sentCount,
+      daily_limit: limit,
+      started_at: createdAt,
+      ends_at: endsAt,
       created_at: createdAt,
-      status: Number(delivery.sent) > 0 ? 'sent' : 'skipped',
-      send_note: 'Sent through Gmail SMTP with a daily cap and duplicate protection.',
+      status: total > 0 && sentCount >= total ? 'complete' : 'running',
+      send_note: 'Sending through Gmail within the daily limit.',
     },
   }]);
 
@@ -482,8 +510,8 @@ export async function submitTokenResponse(input: {
     ok: true,
     pendingId,
     message: input.action === 'opt_out'
-      ? 'Opt-out request submitted. An admin will confirm removal from the talent database.'
-      : 'Update submitted. An admin will confirm before your row is changed.',
+      ? 'Thank you for your reply!'
+      : 'Thank you! We look forward to working together.',
   };
 }
 

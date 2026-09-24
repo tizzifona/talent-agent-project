@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=11">
+    <link rel="stylesheet" href="app.css?v=12">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -34,23 +34,23 @@
           <h1>Welcome to Blue Hope talent dashboard</h1>
           <p class="lede">Pick one path. You can return here from the title at any time.</p>
           <div class="choice-grid">
-            <button class="choice-card" data-view="import">
-              <span class="choice-num">01 · Discovery</span>
-              <h2>Upload and deduplicate</h2>
-              <p>Add new source files and build a unified person table.</p>
-              <p class="when">Use this when you have CSV or Excel exports that still need identity resolution.</p>
-            </button>
             <button class="choice-card" data-view="tables">
-              <span class="choice-num">02 · Working table</span>
-              <h2>Saved tables</h2>
-              <p>Open a table to edit people, export, or start mailing.</p>
-              <p class="when">Use this when matching already ran and you want to work with the result.</p>
+              <span class="choice-num">01 · Talent databases</span>
+              <h2>Work with talent databases</h2>
+              <p>Open a saved database, edit people, filter them, and save a list for mailing.</p>
+              <p class="when">Use this when the database already exists.</p>
             </button>
             <button class="choice-card" data-view="mailing">
-              <span class="choice-num">03 · Outreach</span>
-              <h2>Mailing from a table</h2>
-              <p>Compose a campaign, pick a template, and prepare temporary update links.</p>
-              <p class="when">Use this after review, when the list is clean enough to message.</p>
+              <span class="choice-num">02 · Outreach</span>
+              <h2>Create a mailing</h2>
+              <p>Use the connected mailbox, pick a template, and follow campaign progress.</p>
+              <p class="when">Use this when a list is ready to message.</p>
+            </button>
+            <button class="choice-card" data-view="import">
+              <span class="choice-num">03 · New database</span>
+              <h2>Create a new talent database</h2>
+              <p>Upload source files and deduplicate them into one database.</p>
+              <p class="when">Use this when you have new CSV or Excel exports.</p>
             </button>
           </div>
         </section>
@@ -192,10 +192,6 @@
               <div class="people-meta">
                 <span id="people-count">0 people</span>
                 <span id="people-page-label"></span>
-                <div class="column-controls">
-                  <button id="people-cols-more" class="secondary-btn" type="button">Show next 5 columns</button>
-                  <button id="people-cols-less" class="secondary-btn" type="button" disabled>Hide last 5</button>
-                </div>
               </div>
               <div id="people-empty" class="empty-state">No people in this table yet.</div>
               <div id="people-table-wrap" class="table-scroll" style="display: none;">
@@ -223,10 +219,6 @@
               <p class="upload-hint">Edit or delete a candidate, or complete review to move them into the main People list.</p>
               <div class="people-meta">
                 <span id="review-count">0 in review</span>
-                <div class="column-controls">
-                  <button id="review-cols-more" class="secondary-btn" type="button">Show next 5 columns</button>
-                  <button id="review-cols-less" class="secondary-btn" type="button" disabled>Hide last 5</button>
-                </div>
               </div>
               <div id="review-empty" class="empty-state">No rows currently need review.</div>
               <div id="review-table-wrap" class="table-scroll" style="display: none;">
@@ -304,8 +296,16 @@
             <p class="upload-hint" id="mailing-count">Select a table to see segment size.</p>
           </section>
           <section class="card">
+            <h2>Running mailings</h2>
+            <div id="mailing-campaigns"></div>
+          </section>
+          <section class="card">
             <h2>Templates</h2>
             <div id="mailing-templates" class="template-grid"></div>
+            <div class="setting-item" style="margin-top: 16px;">
+              <label for="mailing-template-name">Template name</label>
+              <input type="text" id="mailing-template-name" placeholder="Template name">
+            </div>
             <div class="settings-grid" style="margin-top: 16px;">
               <div class="setting-item" style="grid-column: 1 / -1;">
                 <label for="mailing-subject">Subject</label>
@@ -317,7 +317,9 @@
               </div>
             </div>
             <div class="btn-row">
-              <button id="mailing-save-template-btn" class="secondary-btn">Save template edits</button>
+              <button id="mailing-new-template-btn" class="secondary-btn" type="button">New template</button>
+              <button id="mailing-save-template-btn" class="secondary-btn" type="button">Save template</button>
+              <button id="mailing-delete-template-btn" class="secondary-btn" type="button">Delete template</button>
               <button id="mailing-refresh-btn" class="secondary-btn">Refresh count</button>
               <button id="mailing-prepare-btn" class="secondary-btn">Prepare campaign &amp; links</button>
               <button id="mailing-send-btn" class="primary-btn" type="button">Send next batch</button>
@@ -839,6 +841,8 @@ Do not invent employment_status. refugee_status is sensitive.`;
           document.getElementById('mailing-segment').addEventListener('change', () => this.refreshMailingCount());
           document.getElementById('mailing-prepare-btn').addEventListener('click', () => this.prepareMailing());
           document.getElementById('mailing-save-template-btn').addEventListener('click', () => this.saveCurrentTemplate());
+          document.getElementById('mailing-new-template-btn').addEventListener('click', () => this.newTemplate());
+          document.getElementById('mailing-delete-template-btn').addEventListener('click', () => this.deleteCurrentTemplate());
           document.getElementById('mailing-templates').addEventListener('click', (event) => {
             const btn = event.target.closest('[data-template-id]');
             if (btn) this.selectTemplate(btn.dataset.templateId);
@@ -873,10 +877,6 @@ Do not invent employment_status. refugee_status is sensitive.`;
             if (e.target.id === 'edit-modal') this.closeEditModal();
           });
           document.getElementById('people-add-btn').addEventListener('click', () => this.openPersonEditor(null));
-          document.getElementById('people-cols-more').addEventListener('click', () => this.changeColumnGroups('people', 1));
-          document.getElementById('people-cols-less').addEventListener('click', () => this.changeColumnGroups('people', -1));
-          document.getElementById('review-cols-more').addEventListener('click', () => this.changeColumnGroups('review', 1));
-          document.getElementById('review-cols-less').addEventListener('click', () => this.changeColumnGroups('review', -1));
           document.getElementById('candidate-submit-btn').addEventListener('click', () => this.submitCandidate('update'));
           document.getElementById('candidate-optout-btn').addEventListener('click', () => this.submitCandidate('opt_out'));
           document.getElementById('chat-input').addEventListener('keypress', (e) => {
@@ -1116,8 +1116,9 @@ Do not invent employment_status. refugee_status is sensitive.`;
           return Math.ceil(TABLE_COLUMNS.length / COLUMN_PAGE);
         }
 
-        visibleColumns(groups) {
-          return [...TABLE_COLUMNS.slice(0, groups * COLUMN_PAGE), ACTION_COLUMN];
+        visibleColumns() {
+          const main = ['name', 'email', 'phone', 'country', 'skills'];
+          return [...TABLE_COLUMNS.filter((column) => main.includes(column.id)), ACTION_COLUMN];
         }
 
         changeColumnGroups(mode, delta) {
@@ -2212,6 +2213,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
             schedule.value = local.toISOString().slice(0, 16);
           }
           await this.refreshMailingCount();
+          await this.loadCampaigns();
           await this.loadTemplates();
           await this.loadPendingUpdates('mailing-pending');
           await this.loadMailSettings();
@@ -2258,20 +2260,83 @@ Do not invent employment_status. refugee_status is sensitive.`;
           document.querySelectorAll('#mailing-templates .template-card').forEach((card) => {
             card.classList.toggle('active', card.dataset.templateId === id);
           });
+          document.getElementById('mailing-template-name').value = tpl.name || '';
           document.getElementById('mailing-subject').value = tpl.subject || '';
           document.getElementById('mailing-body').value = tpl.body || '';
         }
 
-        async saveCurrentTemplate() {
+        newTemplate() {
+          this.selectedTemplateId = '';
+          document.querySelectorAll('#mailing-templates .template-card').forEach((card) => {
+            card.classList.remove('active');
+          });
+          document.getElementById('mailing-template-name').value = '';
+          document.getElementById('mailing-subject').value = '';
+          document.getElementById('mailing-body').value = '';
+        }
+
+        async deleteCurrentTemplate() {
           if (!this.selectedTemplateId) return;
+          if (!confirm('Delete this template?')) return;
           try {
-            const tpl = (this.templates || []).find((item) => item.id === this.selectedTemplateId);
-            await this.agentPost('/mailing/templates/save', {
-              id: this.selectedTemplateId,
-              name: tpl?.name || 'Template',
+            await this.agentPost('/mailing/templates/delete', { id: this.selectedTemplateId });
+            this.selectedTemplateId = '';
+            await this.loadTemplates();
+          } catch (error) {
+            this.showError(error.message);
+          }
+        }
+
+        async loadCampaigns() {
+          const box = document.getElementById('mailing-campaigns');
+          if (!box) return;
+          try {
+            const result = await this.agentPost('/mailing/campaigns', {});
+            const records = result.records || [];
+            if (!records.length) {
+              box.innerHTML = '<p class="upload-hint">No mailings yet.</p>';
+              return;
+            }
+            box.innerHTML = records.map((campaign) => {
+              const total = Number(campaign.recipient_count || 0);
+              const sent = Number(campaign.sent_count || 0);
+              const limit = Number(campaign.daily_limit || 50);
+              const pct = total ? Math.min(100, Math.round((sent / total) * 100)) : 0;
+              const start = campaign.started_at || campaign.created_at;
+              const days = limit > 0 ? Math.max(0, Math.ceil(total / limit) - 1) : 0;
+              const end = campaign.ends_at || (start ? new Date(Date.parse(start) + days * 86400000).toISOString() : '');
+              const when = (value) => value ? new Date(value).toLocaleString() : '—';
+              return `
+                <article class="campaign-card">
+                  <div class="campaign-head">
+                    <strong>${escapeHtml(campaign.subject || campaign.table_name || 'Mailing')}</strong>
+                    <span>${escapeHtml(campaign.status || 'running')}</span>
+                  </div>
+                  <p class="upload-hint">${sent} of ${total} sent · ${limit} per day</p>
+                  <div class="progress"><span style="width:${pct}%"></span></div>
+                  <p class="upload-hint">Started ${escapeHtml(when(start))} · Ends ${escapeHtml(when(end))}</p>
+                </article>
+              `;
+            }).join('');
+          } catch (error) {
+            box.innerHTML = `<p class="upload-hint">${escapeHtml(error.message)}</p>`;
+          }
+        }
+
+        async saveCurrentTemplate() {
+          const name = document.getElementById('mailing-template-name').value.trim();
+          if (!name) {
+            this.showError('Name the template first');
+            return;
+          }
+          try {
+            const result = await this.agentPost('/mailing/templates/save', {
+              id: this.selectedTemplateId || undefined,
+              name,
               subject: document.getElementById('mailing-subject').value,
               body: document.getElementById('mailing-body').value,
             });
+            this.selectedTemplateId = result.record?.id || this.selectedTemplateId;
             await this.loadTemplates();
             alert('Template saved.');
           } catch (error) {
@@ -2389,8 +2454,17 @@ Do not invent employment_status. refugee_status is sensitive.`;
               document.getElementById('candidate-fields').innerHTML = '';
               return;
             }
-            status.textContent = `Link valid until ${result.token?.expires_at ? new Date(result.token.expires_at).toLocaleString() : '3 days from issue'}.`;
-            this.renderFieldInputs('candidate-fields', result.person || {}, 'cand');
+            const optOut = new URLSearchParams(window.location.search).get('intent') === 'opt_out';
+            status.textContent = optOut
+              ? 'You can stop cooperation with Blue Hope. This link stays open for 3 days.'
+              : `Link valid until ${result.token?.expires_at ? new Date(result.token.expires_at).toLocaleString() : '3 days from issue'}.`;
+            if (optOut) {
+              document.getElementById('candidate-fields').innerHTML = '';
+              document.getElementById('candidate-submit-btn').style.display = 'none';
+            } else {
+              this.renderFieldInputs('candidate-fields', result.person || {}, 'cand');
+              document.getElementById('candidate-submit-btn').style.display = '';
+            }
             actions.style.display = 'flex';
           } catch (error) {
             status.textContent = error.message;
@@ -2408,6 +2482,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
               fields: action === 'update' ? this.readFieldInputs('cand') : {},
             });
             document.getElementById('candidate-status').textContent = result.message || 'Submitted.';
+            document.getElementById('candidate-status').classList.add('thanks');
             document.getElementById('candidate-actions').style.display = 'none';
             document.getElementById('candidate-fields').innerHTML = '';
           } catch (error) {
