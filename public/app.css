@@ -1133,6 +1133,79 @@ body {
   line-height: 1.45;
 }
 
+.mailing-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.mailing-layout .card {
+  margin-bottom: 20px;
+}
+
+.mailing-templates .setting-item {
+  margin-top: 14px;
+}
+
+.template-list {
+  display: grid;
+  gap: 8px;
+}
+
+.template-list .template-card {
+  width: 100%;
+  text-align: left;
+}
+
+.send-template {
+  margin: 16px 0 8px;
+}
+
+.send-summary {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 8px 0;
+}
+
+.recipient-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin: 12px 0 16px;
+}
+
+.recipient-list:empty {
+  display: none;
+}
+
+.recipient-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.95rem;
+}
+
+.recipient-row:last-child {
+  border-bottom: none;
+}
+
+.recipient-row span:last-child {
+  color: var(--text-muted);
+}
+
+.recipient-row.sent span:last-child {
+  color: var(--teal);
+}
+
+.send-btn {
+  width: 100%;
+  font-size: 1.1rem;
+}
+
 .campaign-card {
   padding: 14px 0;
   border-bottom: 1px solid var(--line);
@@ -1175,8 +1248,14 @@ body {
     min-height: 280px;
   }
 
-  .filters-bar {
+  .filters-bar,
+  .mailing-layout {
     grid-template-columns: 1fr;
+  }
+
+  .recipient-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 
   .row-actions,

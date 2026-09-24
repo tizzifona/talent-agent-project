@@ -13,7 +13,7 @@ import {
   type JsonMap,
 } from './person-store.ts';
 import { getPeopleList } from './list-store.ts';
-import { brandedEmail, deliverMessages } from './mailer.ts';
+import { brandedEmail, deliverMessages, sentFlags } from './mailer.ts';
 
 const TOKEN_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -249,6 +249,27 @@ async function selectRecipients(runId: string, segment: string): Promise<JsonMap
     seen.add(email);
     return true;
   });
+}
+
+export async function previewRecipients(input: {
+  runId: string;
+  segment: string;
+  subject: string;
+  body: string;
+}): Promise<JsonMap> {
+  const recipients = await selectRecipients(input.runId, input.segment || 'all');
+  const emails = recipients.map((person) => String(person.primary_email || '').trim().toLowerCase());
+  const flags = await sentFlags(emails, String(input.subject || ''), String(input.body || ''));
+  const people = recipients.map((person, index) => ({
+    name: String(person.full_name || [person.first_name, person.last_names].filter(Boolean).join(' ') || ''),
+    email: emails[index],
+    sent: flags[index],
+  }));
+  return {
+    total: people.length,
+    sent: flags.filter(Boolean).length,
+    people,
+  };
 }
 
 export async function prepareCampaign(input: {

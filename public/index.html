@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=12">
+    <link rel="stylesheet" href="app.css?v=13">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -269,71 +269,57 @@
               <button id="smtp-test-btn" class="primary-btn" type="button">Send test email</button>
             </div>
           </section>
-          <section class="card">
-            <div class="settings-grid">
+          <div class="mailing-layout">
+            <section class="card mailing-send">
+              <h2>Send a mailing</h2>
+              <div class="settings-grid">
+                <div class="setting-item">
+                  <label for="mailing-table">1. Database</label>
+                  <select id="mailing-table"></select>
+                </div>
+                <div class="setting-item">
+                  <label for="mailing-segment">2. Who gets it</label>
+                  <select id="mailing-segment">
+                    <option value="all">All people in the working table</option>
+                    <option value="review">Still needs review</option>
+                    <option value="employment">Employment status unknown</option>
+                  </select>
+                </div>
+              </div>
+              <p class="send-template">3. Template: <strong id="mailing-selected-template">—</strong> <span class="upload-hint">(choose on the right)</span></p>
+              <p class="send-summary" id="mailing-count">Choose a database to see who gets this mailing.</p>
+              <div class="progress"><span id="mailing-progress-bar" style="width:0%"></span></div>
+              <p class="upload-hint" id="mailing-progress-label"></p>
+              <div id="mailing-recipients" class="recipient-list"></div>
+              <button id="mailing-send-btn" class="primary-btn send-btn" type="button">Send</button>
+              <p class="upload-hint" id="mailing-prepare-note"></p>
+            </section>
+
+            <aside class="card mailing-templates">
+              <h2>Templates</h2>
+              <div id="mailing-templates" class="template-list"></div>
               <div class="setting-item">
-                <label for="mailing-table">Table</label>
-                <select id="mailing-table"></select>
+                <label for="mailing-template-name">Template name</label>
+                <input type="text" id="mailing-template-name" placeholder="Template name">
               </div>
               <div class="setting-item">
-                <label for="mailing-segment">Segment</label>
-                <select id="mailing-segment">
-                  <option value="all">All people in the working table</option>
-                  <option value="review">Still needs review</option>
-                  <option value="employment">Employment status unknown</option>
-                </select>
-              </div>
-              <div class="setting-item">
-                <label for="mailing-frequency">Frequency</label>
-                <select id="mailing-frequency">
-                  <option value="once">Once</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Every 2 weeks</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-              <div class="setting-item">
-                <label for="mailing-schedule">Schedule / timer</label>
-                <input type="datetime-local" id="mailing-schedule">
-              </div>
-            </div>
-            <p class="upload-hint" id="mailing-count">Select a table to see segment size.</p>
-          </section>
-          <section class="card">
-            <h2>Running mailings</h2>
-            <div id="mailing-campaigns"></div>
-          </section>
-          <section class="card">
-            <h2>Templates</h2>
-            <div id="mailing-templates" class="template-grid"></div>
-            <div class="setting-item" style="margin-top: 16px;">
-              <label for="mailing-template-name">Template name</label>
-              <input type="text" id="mailing-template-name" placeholder="Template name">
-            </div>
-            <div class="settings-grid" style="margin-top: 16px;">
-              <div class="setting-item" style="grid-column: 1 / -1;">
                 <label for="mailing-subject">Subject</label>
                 <input type="text" id="mailing-subject" placeholder="Email subject">
               </div>
-              <div class="setting-item" style="grid-column: 1 / -1;">
-                <label for="mailing-body">Message (use {{first_name}}, {{update_link}}, {{job_title}}, …)</label>
+              <div class="setting-item">
+                <label for="mailing-body">Message (use {{first_name}}, {{update_link}}, {{job_title}})</label>
                 <textarea id="mailing-body" rows="10"></textarea>
               </div>
-            </div>
-            <div class="btn-row">
-              <button id="mailing-new-template-btn" class="secondary-btn" type="button">New template</button>
-              <button id="mailing-save-template-btn" class="secondary-btn" type="button">Save template</button>
-              <button id="mailing-delete-template-btn" class="secondary-btn" type="button">Delete template</button>
-              <button id="mailing-refresh-btn" class="secondary-btn">Refresh count</button>
-              <button id="mailing-prepare-btn" class="secondary-btn">Prepare campaign &amp; links</button>
-              <button id="mailing-send-btn" class="primary-btn" type="button">Send next batch</button>
-              <button id="mailing-open-table-btn" class="secondary-btn">Open this table</button>
-            </div>
-          </section>
+              <div class="btn-row">
+                <button id="mailing-new-template-btn" class="secondary-btn" type="button">New</button>
+                <button id="mailing-save-template-btn" class="secondary-btn" type="button">Save</button>
+                <button id="mailing-delete-template-btn" class="secondary-btn" type="button">Delete</button>
+              </div>
+            </aside>
+          </div>
           <section class="card">
-            <h2>Prepared messages</h2>
-            <p class="upload-hint" id="mailing-prepare-note">Nothing prepared yet.</p>
-            <div id="mailing-prepared" class="prepared-list"></div>
+            <h2>Running mailings</h2>
+            <div id="mailing-campaigns"></div>
           </section>
           <section class="card">
             <h2>Pending candidate replies</h2>
@@ -839,11 +825,8 @@ Do not invent employment_status. refugee_status is sensitive.`;
           });
           document.getElementById('next-export-csv').addEventListener('click', () => this.exportResults('csv'));
           document.getElementById('next-export-xlsx').addEventListener('click', () => this.exportResults('xlsx'));
-          document.getElementById('mailing-refresh-btn').addEventListener('click', () => this.refreshMailingCount());
-          document.getElementById('mailing-open-table-btn').addEventListener('click', () => this.openSelectedMailingTable());
           document.getElementById('mailing-table').addEventListener('change', () => this.refreshMailingCount());
           document.getElementById('mailing-segment').addEventListener('change', () => this.refreshMailingCount());
-          document.getElementById('mailing-prepare-btn').addEventListener('click', () => this.prepareMailing());
           document.getElementById('mailing-save-template-btn').addEventListener('click', () => this.saveCurrentTemplate());
           document.getElementById('mailing-new-template-btn').addEventListener('click', () => this.newTemplate());
           document.getElementById('mailing-delete-template-btn').addEventListener('click', () => this.deleteCurrentTemplate());
@@ -1485,7 +1468,9 @@ Do not invent employment_status. refugee_status is sensitive.`;
             note.textContent = 'Choose a table first.';
             return;
           }
-          if (!confirm('Send the next batch now? This uses Gmail and counts toward the daily limit.')) return;
+          const summary = document.getElementById('mailing-count').textContent;
+          const template = document.getElementById('mailing-selected-template').textContent;
+          if (!confirm(`Send “${template}”?\n${summary}\nUp to 10 go out per click, within the daily limit.`)) return;
           note.textContent = 'Sending...';
           try {
             const table = (await this.agentPost('/tables/get', { id: tableId })).record;
@@ -1500,6 +1485,8 @@ Do not invent employment_status. refugee_status is sensitive.`;
               baseUrl: window.location.href.split('?')[0],
             });
             note.textContent = this.describeDelivery(result);
+            await this.refreshMailingCount();
+            await this.loadCampaigns();
           } catch (error) {
             note.textContent = error.message;
           }
@@ -2259,13 +2246,6 @@ Do not invent employment_status. refugee_status is sensitive.`;
                 </option>
               `).join('')
             : '<option value="">No saved tables</option>';
-          const schedule = document.getElementById('mailing-schedule');
-          if (!schedule.value) {
-            const local = new Date();
-            local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
-            schedule.value = local.toISOString().slice(0, 16);
-          }
-          await this.refreshMailingCount();
           await this.loadCampaigns();
           await this.loadTemplates();
           await this.loadPendingUpdates('mailing-pending');
@@ -2277,9 +2257,9 @@ Do not invent employment_status. refugee_status is sensitive.`;
             this.pendingSegment = '';
             if ([...segment.options].some((option) => option.value === wanted)) {
               segment.value = wanted;
-              await this.refreshMailingCount();
             }
           }
+          await this.refreshMailingCount();
           this.rememberPlace();
         }
 
@@ -2316,6 +2296,8 @@ Do not invent employment_status. refugee_status is sensitive.`;
           document.getElementById('mailing-template-name').value = tpl.name || '';
           document.getElementById('mailing-subject').value = tpl.subject || '';
           document.getElementById('mailing-body').value = tpl.body || '';
+          document.getElementById('mailing-selected-template').textContent = tpl.name || 'Template';
+          if (this.currentView === 'mailing') this.refreshMailingCount();
         }
 
         newTemplate() {
@@ -2547,33 +2529,47 @@ Do not invent employment_status. refugee_status is sensitive.`;
           const tableId = document.getElementById('mailing-table').value;
           const segment = document.getElementById('mailing-segment').value;
           const label = document.getElementById('mailing-count');
+          const list = document.getElementById('mailing-recipients');
+          const bar = document.getElementById('mailing-progress-bar');
+          const progress = document.getElementById('mailing-progress-label');
           if (!tableId) {
-            label.textContent = 'Save a table first, then return here to choose a segment.';
+            label.textContent = 'Save a database first, then return here.';
+            list.innerHTML = '';
             return;
           }
+          label.textContent = 'Loading recipients...';
           try {
             const table = (await this.agentPost('/tables/get', { id: tableId })).record;
             if (!table) throw new Error('Table not found');
             this.currentTable = table;
-            if (segment.startsWith('list:')) {
-              const list = (await this.agentPost('/lists/get', { id: segment.slice(5) })).record;
-              const count = Number(list?.count || (list?.person_ids || []).length || 0);
-              label.textContent = `${count} ${count === 1 ? 'person' : 'people'} in “${list?.name || 'this list'}” will receive this mailing.`;
-              return;
-            }
-            const query = { runId: table.run_id, heldOut: false, limit: 1, offset: 0 };
-            if (segment === 'review') query.needsReview = true;
-            if (segment === 'employment') query.search = 'unknown';
-            const result = await this.agentPost('/persons/query', query);
-            const count = result.count || 0;
-            const names = {
-              all: 'in this database',
-              review: 'still needing review',
-              employment: 'with unknown employment',
-            };
-            label.textContent = `${count} ${count === 1 ? 'person' : 'people'} ${names[segment] || ''} will receive this mailing.`;
+            const result = await this.agentPost('/mailing/recipients', {
+              runId: table.run_id,
+              segment,
+              subject: document.getElementById('mailing-subject').value,
+              body: document.getElementById('mailing-body').value,
+            });
+            const total = result.total || 0;
+            const sent = result.sent || 0;
+            const left = total - sent;
+            const who = segment.startsWith('list:')
+              ? document.getElementById('mailing-segment').selectedOptions[0]?.textContent || 'this list'
+              : `“${table.name}”`;
+            label.textContent = `${left} ${left === 1 ? 'person' : 'people'} from ${who} will get this email.`;
+            const pct = total ? Math.round((sent / total) * 100) : 0;
+            bar.style.width = `${pct}%`;
+            progress.textContent = `${sent} of ${total} already sent with this template.`;
+            list.innerHTML = total
+              ? (result.people || []).map((person) => `
+                  <div class="recipient-row ${person.sent ? 'sent' : ''}">
+                    <span>${escapeHtml(person.name || '—')}</span>
+                    <span>${escapeHtml(person.email)}</span>
+                    <span>${person.sent ? 'Sent' : 'Waiting'}</span>
+                  </div>
+                `).join('')
+              : '<p class="upload-hint">Nobody in this segment has an email address.</p>';
           } catch (error) {
             label.textContent = error.message;
+            list.innerHTML = '';
           }
         }
 

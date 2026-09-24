@@ -274,6 +274,14 @@ async function transmit(settings: MailSettings, message: OutboundMessage): Promi
   });
 }
 
+export async function sentFlags(emails: string[], subject: string, body: string): Promise<boolean[]> {
+  const flags: boolean[] = [];
+  for (const email of emails) {
+    flags.push(await alreadySent(await fingerprint(email, subject, body)));
+  }
+  return flags;
+}
+
 export async function deliverMessages(input: {
   messages: OutboundMessage[];
   templateSubject: string;
