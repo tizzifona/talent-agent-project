@@ -35,6 +35,7 @@ import {
   listPendingUpdates,
   listTemplates,
   prepareCampaign,
+  previewRecipients,
   reviewPendingUpdate,
   deleteTemplate,
   saveTemplate,
@@ -317,6 +318,12 @@ Deno.serve({ port: 0 }, async (request) => {
       const body = await request.json();
       if (!body?.runId || !body?.tableId) return response({ error: 'tableId and runId required' });
       return response({ ok: await prepareCampaign(body) });
+    }
+
+    if (url.pathname.endsWith('/mailing/recipients') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.runId) return response({ error: 'runId required' });
+      return response({ ok: await previewRecipients(body) });
     }
 
     if (url.pathname.endsWith('/mailing/send') && request.method === 'POST') {
