@@ -68,10 +68,7 @@ If you are, please take a couple of minutes to update your information. That hel
 
 Please review and update your information so we can match you better.
 
-Open your secure form here:
-{{update_link}}
-
-Valid for 3 days.
+Use the buttons below. The form stays open for 3 days.
 
 Blue Hope talent team`,
   },
@@ -83,10 +80,7 @@ Blue Hope talent team`,
 
 We may have an opportunity that fits your background ({{job_title}} / {{technical_skills}}).
 
-Confirm or refresh your data here before we share more:
-{{update_link}}
-
-Link expires in 3 days.
+Confirm or refresh your data with the buttons below before we share more. The form stays open for 3 days.
 
 Blue Hope`,
   },
@@ -98,10 +92,7 @@ Blue Hope`,
 
 Please confirm your skills and experience are still current.
 
-Update form:
-{{update_link}}
-
-Available for 3 days.
+Use the buttons below. The form stays open for 3 days.
 
 Blue Hope`,
   },
@@ -111,10 +102,9 @@ Blue Hope`,
     subject: 'Stay in the Blue Hope talent database?',
     body: `Hi {{first_name}},
 
-You can stay in our talent database, update your data, or opt out completely using this link:
-{{update_link}}
+You can stay in our talent database, update your data, or opt out completely using the buttons below.
 
-The link is valid for 3 days only.
+The form is valid for 3 days only.
 
 Blue Hope`,
   },
@@ -196,11 +186,15 @@ export async function ensureDefaultTemplates(): Promise<JsonMap[]> {
   const visible = rows.filter((row) => !row.deleted);
   const byId = new Map(visible.map((row) => [String(row.id), row]));
   const now = new Date().toISOString();
-  const writes = DEFAULT_TEMPLATES.filter((tpl) => tpl.id === 'tpl-reengage' || !byId.has(tpl.id)).map((tpl) => ({
+  const writes = DEFAULT_TEMPLATES.filter((tpl) => {
+    const saved = byId.get(tpl.id);
+    if (!saved) return true;
+    return /\{\{update_link\}\}|\{\{opt_out_link\}\}|https?:\/\//i.test(String(saved.body || ''));
+  }).map((tpl) => ({
     id: tpl.id,
     object: {
-      name: tpl.name,
-      subject: tpl.subject,
+      name: String(byId.get(tpl.id)?.name || tpl.name),
+      subject: String(byId.get(tpl.id)?.subject || tpl.subject),
       body: tpl.body,
       created_at: byId.get(tpl.id)?.created_at || now,
       updated_at: now,
@@ -660,8 +654,11 @@ export async function importPublicReplies(): Promise<JsonMap> {
       action,
       fields: row.fields || {},
     });
-    if (result.ok) imported += 1;
-    else skipped += 1;
+    if (!result.ok) {
+      skipped += 1;
+      continue;
+    }
+    imported += 1;
     await supabaseRequest(secret, `candidate_replies?id=eq.${row.id}`, 'PATCH', {
       imported_at: new Date().toISOString(),
     });
