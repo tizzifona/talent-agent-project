@@ -1133,6 +1133,13 @@ body {
   line-height: 1.45;
 }
 
+body.public-candidate #back-btn,
+body.public-candidate #home-btn,
+body.public-candidate .agent-rail,
+body.public-candidate #connection-status {
+  display: none;
+}
+
 .mailing-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(320px, 1fr);

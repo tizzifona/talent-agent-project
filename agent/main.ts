@@ -35,6 +35,7 @@ import {
   listPendingUpdates,
   listTemplates,
   prepareCampaign,
+  importPublicReplies,
   previewRecipients,
   reviewPendingUpdate,
   deleteTemplate,
@@ -379,6 +380,10 @@ Deno.serve({ port: 0 }, async (request) => {
     if (url.pathname.endsWith('/mailing/campaigns') && request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
       return response({ ok: { records: await listCampaigns(body?.tableId) } });
+    }
+
+    if (url.pathname.endsWith('/mailing/replies/import') && request.method === 'POST') {
+      return response({ ok: await importPublicReplies() });
     }
 
     if (url.pathname.endsWith('/mailing/pending') && request.method === 'POST') {
