@@ -13,7 +13,7 @@ import {
   type JsonMap,
 } from './person-store.ts';
 import { getPeopleList } from './list-store.ts';
-import { brandedEmail, deliverMessages, sentFlags } from './mailer.ts';
+import { brandedEmail, deliverMessages, replySecret, sentFlags } from './mailer.ts';
 
 const TOKEN_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -127,6 +127,28 @@ function unwrap(record: JsonMap): JsonMap {
   return { id: record.id, ...object };
 }
 
+function encodePayload(data: JsonMap): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(data));
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+export function publicCandidateLink(base: string, token: string, snapshot: JsonMap, expiresAt: string): string {
+  const fields: JsonMap = {};
+  for (const field of EDITABLE_PERSON_FIELDS) fields[field] = snapshot[field] ?? '';
+  const payload = encodePayload({ exp: expiresAt, fields });
+  return `${base}?token=${token}#d=${payload}`;
+}
+
+function withOptOut(updateLink: string): string {
+  const hashAt = updateLink.indexOf('#');
+  const before = hashAt >= 0 ? updateLink.slice(0, hashAt) : updateLink;
+  const hash = hashAt >= 0 ? updateLink.slice(hashAt) : '';
+  const joiner = before.includes('?') ? '&' : '?';
+  return `${before}${joiner}intent=opt_out${hash}`;
+}
+
 function randomToken(): string {
   const bytes = new Uint8Array(18);
   crypto.getRandomValues(bytes);
@@ -153,9 +175,7 @@ function renderTemplate(text: string, person: JsonMap, updateLink: string): stri
     job_title: String(person.job_title || ''),
     technical_skills: String(person.technical_skills || ''),
     update_link: updateLink,
-    opt_out_link: updateLink.includes('token=')
-      ? `${updateLink}${updateLink.includes('?') ? '&' : '?'}intent=opt_out`
-      : updateLink,
+    opt_out_link: updateLink.includes('token=') ? withOptOut(updateLink) : updateLink,
   };
   return text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => values[key] ?? '');
 }
@@ -296,8 +316,8 @@ export async function prepareCampaign(input: {
 
   for (const person of recipients) {
     const token = randomToken();
-    const updateLink = `${base}?token=${token}`;
     const snapshot = personSnapshot(person);
+    const updateLink = publicCandidateLink(base, token, snapshot, expiresAt);
     tokenRecords.push({
       id: token,
       object: {
@@ -373,8 +393,9 @@ export async function sendCampaign(input: {
 
   for (const person of recipients) {
     const token = randomToken();
-    const updateLink = `${base}?token=${token}`;
-    const optOutLink = `${updateLink}&intent=opt_out`;
+    const snapshot = personSnapshot(person);
+    const updateLink = publicCandidateLink(base, token, snapshot, expiresAt);
+    const optOutLink = withOptOut(updateLink);
     const email = String(person.primary_email || '').trim();
     const text = renderTemplate(input.body, person, updateLink);
     tokenRecords.push({
@@ -598,4 +619,52 @@ export async function reviewPendingUpdate(
   };
   await structuredWrite(COLLECTIONS.pendingUpdates, TYPES.pendingUpdate, [{ id, object: next }]);
   return { pending: { id, ...next }, person: personResult };
+}
+
+const SUPABASE_URL = 'https://akjiwfexxjgoaqakveco.supabase.co';
+
+async function supabaseRequest(secret: string, path: string, method: string, body?: JsonMap): Promise<unknown> {
+  const headers: Record<string, string> = {
+    apikey: secret,
+    Authorization: `Bearer ${secret}`,
+    'Content-Type': 'application/json',
+  };
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `Supabase ${res.status}`);
+  }
+  if (res.status === 204) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+export async function importPublicReplies(): Promise<JsonMap> {
+  const secret = await replySecret();
+  if (!secret) return { imported: 0, skipped: 0, note: 'Paste the Supabase secret key in Sending account and save it.' };
+  const rows = await supabaseRequest(
+    secret,
+    'candidate_replies?imported_at=is.null&select=id,token,action,fields&order=created_at.asc',
+    'GET',
+  ) as Array<{ id: string; token: string; action: string; fields?: JsonMap }>;
+  let imported = 0;
+  let skipped = 0;
+  for (const row of rows || []) {
+    const action = row.action === 'opt_out' ? 'opt_out' : 'update';
+    const result = await submitTokenResponse({
+      token: String(row.token || ''),
+      action,
+      fields: row.fields || {},
+    });
+    if (result.ok) imported += 1;
+    else skipped += 1;
+    await supabaseRequest(secret, `candidate_replies?id=eq.${row.id}`, 'PATCH', {
+      imported_at: new Date().toISOString(),
+    });
+  }
+  return { imported, skipped };
 }

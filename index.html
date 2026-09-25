@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=13">
+    <link rel="stylesheet" href="app.css?v=14">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -262,6 +262,10 @@
               <div class="setting-item">
                 <label for="smtp-test-to">Send test to</label>
                 <input id="smtp-test-to" type="email" placeholder="Your own inbox">
+              </div>
+              <div class="setting-item">
+                <label for="reply-secret">Supabase secret key</label>
+                <input id="reply-secret" type="password" placeholder="Paste once, then save" autocomplete="off">
               </div>
             </div>
             <div class="btn-row">
@@ -707,6 +711,10 @@ Do not invent employment_status. refugee_status is sensitive.`;
           const params = new URLSearchParams(window.location.search);
           this.candidateToken = params.get('token') || '';
           this.setupEventListeners();
+          if (this.candidateToken) {
+            this.openPublicCandidate();
+            return;
+          }
           const saved = this.readPlace();
           if (!this.candidateToken && saved?.view && saved.view !== 'hub') {
             if (saved.search != null) document.getElementById('people-search').value = saved.search;
@@ -1406,6 +1414,8 @@ Do not invent employment_status. refugee_status is sensitive.`;
             if (sender && settings.user && settings.user.toLowerCase() !== 'tizzifona@gmail.com') {
               sender.value = settings.user;
             }
+            const secret = document.getElementById('reply-secret');
+            if (secret) secret.placeholder = settings.reply_secret_set ? 'Saved. Paste a new key to replace it.' : 'Paste once, then save';
             const status = document.getElementById('smtp-status');
             status.textContent = settings.user && settings.user.toLowerCase() !== 'tizzifona@gmail.com'
               ? `Sending from ${settings.user}. Send test to only receives the message.`
@@ -1418,12 +1428,15 @@ Do not invent employment_status. refugee_status is sensitive.`;
         async saveMailSettings() {
           const status = document.getElementById('smtp-status');
           try {
+            const replySecret = document.getElementById('reply-secret').value.trim();
             const settings = await this.agentPost('/mailing/settings/save', {
               user: document.getElementById('smtp-user').value.trim(),
               daily_limit: Number(document.getElementById('smtp-limit').value || 50),
               host: 'smtp.gmail.com',
               port: 587,
+              reply_secret: replySecret,
             });
+            if (replySecret) document.getElementById('reply-secret').value = '';
             status.textContent = `Sending from ${settings.user}. Daily limit ${settings.daily_limit}.`;
           } catch (error) {
             status.textContent = error.message;
@@ -2248,8 +2261,9 @@ Do not invent employment_status. refugee_status is sensitive.`;
             : '<option value="">No saved tables</option>';
           await this.loadCampaigns();
           await this.loadTemplates();
-          await this.loadPendingUpdates('mailing-pending');
           await this.loadMailSettings();
+          await this.importPublicReplies();
+          await this.loadPendingUpdates('mailing-pending');
           await this.loadSavedLists();
           if (this.pendingSegment) {
             const segment = document.getElementById('mailing-segment');
@@ -2477,6 +2491,82 @@ Do not invent employment_status. refugee_status is sensitive.`;
           }
         }
 
+        openPublicCandidate() {
+          const statusBadge = document.getElementById('connection-status');
+          statusBadge.textContent = 'Secure link';
+          statusBadge.classList.remove('error');
+          document.body.classList.add('public-candidate');
+          this.switchView('candidate', { replace: true, silent: true, skipLoad: true });
+          const status = document.getElementById('candidate-status');
+          const actions = document.getElementById('candidate-actions');
+          const payload = this.readLinkPayload();
+          if (payload.exp && Date.parse(payload.exp) < Date.now()) {
+            status.textContent = 'This link expired after 3 days.';
+            actions.style.display = 'none';
+            return;
+          }
+          const optOut = new URLSearchParams(window.location.search).get('intent') === 'opt_out';
+          status.textContent = optOut
+            ? 'You can stop cooperation with Blue Hope. No login is required.'
+            : 'Update your details below. No login is required. This link stays open for 3 days.';
+          if (optOut) {
+            document.getElementById('candidate-fields').innerHTML = '';
+            document.getElementById('candidate-submit-btn').style.display = 'none';
+          } else {
+            this.renderFieldInputs('candidate-fields', payload.fields || {}, 'cand');
+            document.getElementById('candidate-submit-btn').style.display = '';
+          }
+          actions.style.display = 'flex';
+        }
+
+        readLinkPayload() {
+          const raw = (window.location.hash.match(/(?:^#|[?&])d=([^&]+)/) || [])[1];
+          if (!raw) return {};
+          try {
+            const b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+            const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+            const bytes = Uint8Array.from(atob(padded), (char) => char.charCodeAt(0));
+            return JSON.parse(new TextDecoder().decode(bytes));
+          } catch {
+            return {};
+          }
+        }
+
+        async submitPublicReply(action) {
+          const SUPABASE_URL = 'https://akjiwfexxjgoaqakveco.supabase.co';
+          const SUPABASE_KEY = 'sb_publishable_ys0xIPug4o33lVe4N4vPAw_9VLyNZkc';
+          const response = await fetch(`${SUPABASE_URL}/rest/v1/candidate_replies`, {
+            method: 'POST',
+            headers: {
+              apikey: SUPABASE_KEY,
+              Authorization: `Bearer ${SUPABASE_KEY}`,
+              'Content-Type': 'application/json',
+              Prefer: 'return=minimal',
+            },
+            body: JSON.stringify({
+              token: this.candidateToken,
+              action,
+              fields: action === 'update' ? this.readFieldInputs('cand') : {},
+            }),
+          });
+          if (!response.ok) {
+            const text = await response.text();
+            throw new Error(text || 'Could not save your reply.');
+          }
+        }
+
+        async importPublicReplies() {
+          try {
+            const result = await this.agentPost('/mailing/replies/import', {});
+            if (result?.note) {
+              const status = document.getElementById('smtp-status');
+              if (status && !/Sending from/.test(status.textContent)) status.textContent = result.note;
+            }
+          } catch (error) {
+            console.error('Reply import failed:', error);
+          }
+        }
+
         async loadCandidatePortal() {
           if (!this.candidateToken) return;
           const status = document.getElementById('candidate-status');
@@ -2511,11 +2601,12 @@ Do not invent employment_status. refugee_status is sensitive.`;
           if (!this.candidateToken) return;
           if (action === 'opt_out' && !confirm('Request removal from the Blue Hope talent database?')) return;
           try {
-            const result = await this.agentPost('/candidate/submit', {
-              token: this.candidateToken,
-              action,
-              fields: action === 'update' ? this.readFieldInputs('cand') : {},
-            });
+            await this.submitPublicReply(action);
+            const result = {
+              message: action === 'opt_out'
+                ? 'Thank you for your reply!'
+                : 'Thank you! We look forward to working together.',
+            };
             document.getElementById('candidate-status').textContent = result.message || 'Submitted.';
             document.getElementById('candidate-status').classList.add('thanks');
             document.getElementById('candidate-actions').style.display = 'none';
