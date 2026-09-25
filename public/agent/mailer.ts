@@ -23,8 +23,19 @@ export interface OutboundMessage {
   personId?: string;
 }
 
+function emailCopy(text: string): string {
+  return String(text || '')
+    .replace(/\{\{(update_link|opt_out_link)\}\}/g, '')
+    .split('\n')
+    .filter((line) => !/https?:\/\//i.test(line))
+    .join('\n')
+    .replace(/using this link:\s*/gi, 'using the buttons below.\n\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function brandedEmail(text: string, updateLink = '', optOutLink = ''): string {
-  const safe = String(text || '')
+  const safe = emailCopy(text)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
@@ -33,20 +44,25 @@ export function brandedEmail(text: string, updateLink = '', optOutLink = ''): st
     .map((part) => `<p style="margin:0 0 16px;line-height:1.55;">${part.replace(/\n/g, '<br>')}</p>`)
     .join('');
   const button = (href: string, label: string, filled: boolean) => href
-    ? `<a href="${href}" style="display:inline-block;margin:8px 8px 0 0;padding:12px 18px;border-radius:10px;font-weight:700;text-decoration:none;${filled
+    ? `<tr><td style="padding:0 0 10px;">
+        <a href="${href}" style="display:block;width:100%;box-sizing:border-box;padding:14px 16px;border-radius:10px;font-weight:700;text-decoration:none;text-align:center;${filled
       ? 'background:#3bffc2;color:#0b1628;'
-      : 'background:transparent;color:#e8f0ff;border:1px solid #1e2d4a;'}">${label}</a>`
+      : 'background:transparent;color:#e8f0ff;border:1px solid #1e2d4a;'}">${label}</a>
+      </td></tr>`
     : '';
-  return `<!doctype html><html><body style="margin:0;padding:24px;background:#0b1628;color:#e8f0ff;font-family:Manrope,Segoe UI,sans-serif;">
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><meta charset="utf-8"></head>
+    <body style="margin:0;padding:12px;background:#0b1628;color:#e8f0ff;font-family:Manrope,Segoe UI,sans-serif;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#121f38;border:1px solid #1e2d4a;border-radius:16px;">
-      <tr><td style="padding:28px 28px 8px;">
-        <img src="https://tizzifona.github.io/talent-agent-project/images/icon-heart.png" alt="Blue Hope" width="42" height="42" style="display:block;border-radius:10px;">
+      <tr><td style="padding:20px 16px 8px;">
+        <img src="https://tizzifona.github.io/talent-agent-project/images/icon-heart.png" alt="Blue Hope" width="42" height="42" style="display:block;border:0;border-radius:10px;">
         <p style="margin:14px 0 0;font-size:13px;letter-spacing:0.12em;text-transform:uppercase;color:#3bffc2;">Blue Hope</p>
       </td></tr>
-      <tr><td style="padding:8px 28px 28px;font-size:16px;">
+      <tr><td style="padding:8px 16px 8px;font-size:16px;word-break:break-word;">
         ${paragraphs}
-        ${button(updateLink, 'Yes, I want to update my data', true)}
-        ${button(optOutLink, 'No, I would like to stop working together', false)}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          ${button(updateLink, 'Yes, I want to update my data', true)}
+          ${button(optOutLink, 'No, I would like to stop working together', false)}
+        </table>
       </td></tr>
     </table>
   </body></html>`;

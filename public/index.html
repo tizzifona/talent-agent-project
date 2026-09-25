@@ -2438,6 +2438,11 @@ Do not invent employment_status. refugee_status is sensitive.`;
           const el = document.getElementById(targetId);
           if (!el) return;
           try {
+            const imported = await this.agentPost('/mailing/replies/import', {});
+            if (imported?.note) {
+              el.innerHTML = `<p class="upload-hint">${escapeHtml(imported.note)}</p>`;
+              return;
+            }
             const result = await this.agentPost('/mailing/pending', {
               tableId: this.currentTable?.id,
               runId: this.currentTable?.run_id,
