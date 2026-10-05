@@ -1,4 +1,4 @@
-title: Talent Agent v3
+title: Talent Agent
 description: Blue Hope talent dashboard with editable tables and mailing prep
 icon: https://tizzifona.github.io/talent-agent-project/images/icon-heart.png
 
@@ -15,6 +15,10 @@ scope:
     description: Can process CSV data and perform matching
   expertAsk:
     description: Can ask this agent as an MCP expert
+  read_drive:
+    description: Can read personal-link replies from drive
+  write_drive:
+    description: Can manage personal-link replies on drive
 
 grant:
   ${party}:
@@ -24,10 +28,20 @@ grant:
     - write_memory
     - process_data
     - expertAsk
+    - read_drive
+    - write_drive
 
 audience:
   ${party}:
-    ${source}: chat useTools read_memory write_memory process_data
+    ${source}: chat useTools read_memory write_memory process_data read_drive write_drive
+
+drive:
+  replies:
+    write:
+      - public
+      - ${party}
+    read:
+      - ${party}
 
 tab:
   agent:

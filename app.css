@@ -397,6 +397,63 @@ body {
   margin-bottom: 16px;
 }
 
+.combo {
+  position: relative;
+}
+
+.combo-list {
+  position: absolute;
+  z-index: 5;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  max-height: 220px;
+  overflow: auto;
+  background: var(--surface-card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.combo-list button,
+.skill-chip {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.combo-list button:hover,
+.skill-chip:hover {
+  background: var(--surface-overlay);
+}
+
+.phone-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.9fr) 1.2fr;
+  gap: 8px;
+}
+
+.skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.skill-chip {
+  width: auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+}
+
 .setting-item label {
   display: block;
   font-weight: 700;
