@@ -383,7 +383,7 @@ Deno.serve({ port: 0 }, async (request) => {
     }
 
     if (url.pathname.endsWith('/mailing/replies/import') && request.method === 'POST') {
-      return response({ ok: await importPublicReplies() });
+      return response({ ok: await importPublicReplies(request) });
     }
 
     if (url.pathname.endsWith('/mailing/pending') && request.method === 'POST') {

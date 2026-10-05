@@ -3,17 +3,17 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Talent Agent v3</title>
+    <title>Talent Agent</title>
     <link rel="webdaemon" href="app.yml">
     <link rel="icon" type="image/png" href="images/icon-heart.png">
     <link rel="apple-touch-icon" href="images/icon-heart.png">
-    <meta property="og:title" content="Talent Agent v3">
+    <meta property="og:title" content="Talent Agent">
     <meta property="og:description" content="Blue Hope talent dashboard">
     <meta property="og:image" content="https://tizzifona.github.io/talent-agent-project/images/icon-heart.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=14">
+    <link rel="stylesheet" href="app.css?v=15">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -264,8 +264,8 @@
                 <input id="smtp-test-to" type="email" placeholder="Your own inbox">
               </div>
               <div class="setting-item">
-                <label for="reply-secret">Supabase secret key</label>
-                <input id="reply-secret" type="password" placeholder="Paste once, then save" autocomplete="off">
+                <label for="smtp-password">Gmail app password</label>
+                <input id="smtp-password" type="password" placeholder="Paste once, then save" autocomplete="new-password">
               </div>
             </div>
             <div class="btn-row">
@@ -409,6 +409,7 @@
     </div>
 
     <script type="module">
+      import { bindEnhancedFields, enhancedControl, readEnhancedValue } from './form-assist.js';
       const DAEMON_SDK = 'https://webdaemon.online/latest/static/lib/dist/index.js';
       const PAGE_SIZE = 25;
       const COLUMN_PAGE = 5;
@@ -1404,15 +1405,18 @@ Do not invent employment_status. refugee_status is sensitive.`;
             const settings = await this.agentPost('/mailing/settings', {});
             document.getElementById('smtp-limit').value = settings.daily_limit || 50;
             const sender = document.getElementById('smtp-user');
-            if (sender && settings.user && settings.user.toLowerCase() !== 'tizzifona@gmail.com') {
-              sender.value = settings.user;
+            if (sender && settings.user) sender.value = settings.user;
+            const password = document.getElementById('smtp-password');
+            if (password) {
+              password.value = '';
+              password.placeholder = settings.password_set
+                ? 'Saved in this daemon. Paste a new password to replace it.'
+                : 'Paste the Gmail app password once, then save';
             }
-            const secret = document.getElementById('reply-secret');
-            if (secret) secret.placeholder = settings.reply_secret_set ? 'Saved. Paste a new key to replace it.' : 'Paste once, then save';
             const status = document.getElementById('smtp-status');
-            status.textContent = settings.user && settings.user.toLowerCase() !== 'tizzifona@gmail.com'
-              ? `Sending from ${settings.user}. Send test to only receives the message.`
-              : 'Enter the test Gmail address that owns the app password. tizzifona@gmail.com only receives the test.';
+            status.textContent = settings.password_set && settings.user
+              ? `Sending from ${settings.user}. The app password stays in your daemon.`
+              : 'Enter the Gmail address and its app password. Save them here. They are not stored in the public app files.';
           } catch (error) {
             document.getElementById('smtp-status').textContent = error.message;
           }
@@ -1421,16 +1425,19 @@ Do not invent employment_status. refugee_status is sensitive.`;
         async saveMailSettings() {
           const status = document.getElementById('smtp-status');
           try {
-            const replySecret = document.getElementById('reply-secret').value.trim();
+            const appPassword = document.getElementById('smtp-password').value.trim();
             const settings = await this.agentPost('/mailing/settings/save', {
               user: document.getElementById('smtp-user').value.trim(),
               daily_limit: Number(document.getElementById('smtp-limit').value || 50),
               host: 'smtp.gmail.com',
               port: 587,
-              reply_secret: replySecret,
+              app_password: appPassword,
             });
-            if (replySecret) document.getElementById('reply-secret').value = '';
-            status.textContent = `Sending from ${settings.user}. Daily limit ${settings.daily_limit}.`;
+            document.getElementById('smtp-password').value = '';
+            document.getElementById('smtp-password').placeholder = settings.password_set
+              ? 'Saved in this daemon. Paste a new password to replace it.'
+              : 'Paste the Gmail app password once, then save';
+            status.textContent = `Sending from ${settings.user}. Daily limit ${settings.daily_limit}. The app password is stored only in this daemon.`;
           } catch (error) {
             status.textContent = error.message;
           }
@@ -1489,6 +1496,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
               subject: document.getElementById('mailing-subject').value,
               body: document.getElementById('mailing-body').value,
               baseUrl: window.location.href.split('?')[0],
+              inboxUrl: await this.replyInboxUrl(),
             });
             note.textContent = this.describeDelivery(result);
             await this.refreshMailingCount();
@@ -1634,23 +1642,34 @@ Do not invent employment_status. refugee_status is sensitive.`;
           document.getElementById('report-modal').classList.remove('active');
         }
 
-        renderFieldInputs(containerId, values = {}, prefix = 'field') {
+        renderFieldInputs(containerId, values = {}, prefix = 'field', enhanced = false) {
           const container = document.getElementById(containerId);
           container.innerHTML = EDITABLE_FIELDS.map((field) => `
             <div class="setting-item">
               <label for="${prefix}-${field}">${escapeHtml(FIELD_LABELS[field] || field)}</label>
-              <input id="${prefix}-${field}" type="text" data-field="${field}" value="${escapeHtml(values[field] || '')}">
+              ${enhanced
+                ? enhancedControl(field, `${prefix}-${field}`, values[field] || '')
+                : `<input id="${prefix}-${field}" type="text" data-field="${field}" value="${escapeHtml(values[field] || '')}">`}
             </div>
           `).join('');
+          if (enhanced) {
+            bindEnhancedFields(container, () => document.getElementById(`${prefix}-job_title`)?.value || values.job_title || '');
+          }
         }
 
         readFieldInputs(prefix = 'field') {
           const fields = {};
           for (const name of EDITABLE_FIELDS) {
-            const input = document.getElementById(`${prefix}-${name}`);
-            fields[name] = input ? input.value.trim() : '';
+            fields[name] = readEnhancedValue(name, prefix);
           }
           return fields;
+        }
+
+        async replyInboxUrl() {
+          if (!this.app) return '';
+          const prefix = (await this.app.getPrefix?.()) || (await this.app.getDefaultPrefix?.()) || '';
+          if (!prefix) return '';
+          return `${this.app.getPartyOrigin()}/drive/${prefix}/replies`;
         }
 
         async openPersonEditor(personId) {
@@ -2409,6 +2428,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
                 ? new Date(document.getElementById('mailing-schedule').value).toISOString()
                 : new Date().toISOString(),
               baseUrl: window.location.href.split('?')[0],
+              inboxUrl: await this.replyInboxUrl(),
             });
             document.getElementById('mailing-prepare-note').textContent =
               `Prepared ${result.recipientCount || 0} messages. Links expire ${result.expiresAt ? new Date(result.expiresAt).toLocaleString() : 'in 3 days'}. Use Send next batch to deliver them.`;
@@ -2431,11 +2451,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
           const el = document.getElementById(targetId);
           if (!el) return;
           try {
-            const imported = await this.agentPost('/mailing/replies/import', {});
-            if (imported?.note) {
-              el.innerHTML = `<p class="upload-hint">${escapeHtml(imported.note)}</p>`;
-              return;
-            }
+            await this.agentPost('/mailing/replies/import', {}).catch(() => null);
             const result = await this.agentPost('/mailing/pending', {
               tableId: this.currentTable?.id,
               runId: this.currentTable?.run_id,
@@ -2511,7 +2527,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
             document.getElementById('candidate-fields').innerHTML = '';
             document.getElementById('candidate-submit-btn').style.display = 'none';
           } else {
-            this.renderFieldInputs('candidate-fields', payload.fields || {}, 'cand');
+            this.renderFieldInputs('candidate-fields', payload.fields || {}, 'cand', true);
             document.getElementById('candidate-submit-btn').style.display = '';
           }
           actions.style.display = 'flex';
@@ -2531,20 +2547,19 @@ Do not invent employment_status. refugee_status is sensitive.`;
         }
 
         async submitPublicReply(action) {
-          const SUPABASE_URL = 'https://akjiwfexxjgoaqakveco.supabase.co';
-          const SUPABASE_KEY = 'sb_publishable_ys0xIPug4o33lVe4N4vPAw_9VLyNZkc';
-          const response = await fetch(`${SUPABASE_URL}/rest/v1/candidate_replies`, {
-            method: 'POST',
-            headers: {
-              apikey: SUPABASE_KEY,
-              Authorization: `Bearer ${SUPABASE_KEY}`,
-              'Content-Type': 'application/json',
-              Prefer: 'return=minimal',
-            },
+          const payload = this.readLinkPayload();
+          const inbox = String(payload.inbox || '').replace(/\/$/, '');
+          if (!inbox) {
+            throw new Error('This link cannot deliver a reply. Ask Blue Hope to send a new personal link.');
+          }
+          const response = await fetch(`${inbox}/${encodeURIComponent(this.candidateToken)}.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               token: this.candidateToken,
               action,
               fields: action === 'update' ? this.readFieldInputs('cand') : {},
+              created_at: new Date().toISOString(),
             }),
           });
           if (!response.ok) {
@@ -2585,7 +2600,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
               document.getElementById('candidate-fields').innerHTML = '';
               document.getElementById('candidate-submit-btn').style.display = 'none';
             } else {
-              this.renderFieldInputs('candidate-fields', result.person || {}, 'cand');
+              this.renderFieldInputs('candidate-fields', result.person || {}, 'cand', true);
               document.getElementById('candidate-submit-btn').style.display = '';
             }
             actions.style.display = 'flex';

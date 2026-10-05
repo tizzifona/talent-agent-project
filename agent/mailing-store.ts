@@ -13,7 +13,9 @@ import {
   type JsonMap,
 } from './person-store.ts';
 import { getPeopleList } from './list-store.ts';
-import { brandedEmail, deliverMessages, replySecret, sentFlags } from './mailer.ts';
+import { brandedEmail, deliverMessages, sentFlags } from './mailer.ts';
+import { Lifecycle } from '$static/lib/ts/Lifecycle.ts';
+import { Token } from '$static/lib/js/Token.js';
 
 const TOKEN_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -124,11 +126,26 @@ function encodePayload(data: JsonMap): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
 }
 
-export function publicCandidateLink(base: string, token: string, snapshot: JsonMap, expiresAt: string): string {
+export function publicCandidateLink(
+  base: string,
+  token: string,
+  snapshot: JsonMap,
+  expiresAt: string,
+  inboxUrl = '',
+): string {
   const fields: JsonMap = {};
   for (const field of EDITABLE_PERSON_FIELDS) fields[field] = snapshot[field] ?? '';
-  const payload = encodePayload({ exp: expiresAt, fields });
+  const payload = encodePayload({ exp: expiresAt, fields, inbox: inboxUrl });
   return `${base}?token=${token}#d=${payload}`;
+}
+
+export function replyInboxUrl(): string {
+  try {
+    const { system } = Lifecycle.getConfig();
+    return `${system.protocol}//${system.party}/drive/${system.sourcePrefix}/replies`;
+  } catch {
+    return '';
+  }
 }
 
 function withOptOut(updateLink: string): string {
@@ -297,6 +314,7 @@ export async function prepareCampaign(input: {
   frequency: string;
   scheduleAt: string;
   baseUrl: string;
+  inboxUrl?: string;
 }): Promise<JsonMap> {
   const recipients = await selectRecipients(input.runId, input.segment);
 
@@ -304,6 +322,7 @@ export async function prepareCampaign(input: {
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
   const base = String(input.baseUrl || '').replace(/[?#].*$/, '').replace(/\/$/, '');
+  const inbox = String(input.inboxUrl || replyInboxUrl());
 
   const messages: JsonMap[] = [];
   const tokenRecords: Array<{ id: string; object: JsonMap }> = [];
@@ -311,7 +330,7 @@ export async function prepareCampaign(input: {
   for (const person of recipients) {
     const token = randomToken();
     const snapshot = personSnapshot(person);
-    const updateLink = publicCandidateLink(base, token, snapshot, expiresAt);
+    const updateLink = publicCandidateLink(base, token, snapshot, expiresAt, inbox);
     tokenRecords.push({
       id: token,
       object: {
@@ -376,19 +395,21 @@ export async function sendCampaign(input: {
   subject: string;
   body: string;
   baseUrl: string;
+  inboxUrl?: string;
 }): Promise<JsonMap> {
   const recipients = await selectRecipients(input.runId, input.segment);
   const campaignId = `camp-${Date.now()}`;
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
   const base = String(input.baseUrl || '').replace(/[?#].*$/, '').replace(/\/$/, '');
+  const inbox = String(input.inboxUrl || replyInboxUrl());
   const messages: Array<{ email: string; subject: string; body: string; html?: string; personId: string }> = [];
   const tokenRecords: Array<{ id: string; object: JsonMap }> = [];
 
   for (const person of recipients) {
     const token = randomToken();
     const snapshot = personSnapshot(person);
-    const updateLink = publicCandidateLink(base, token, snapshot, expiresAt);
+    const updateLink = publicCandidateLink(base, token, snapshot, expiresAt, inbox);
     const optOutLink = withOptOut(updateLink);
     const email = String(person.primary_email || '').trim();
     const text = renderTemplate(input.body, person, updateLink);
@@ -615,53 +636,56 @@ export async function reviewPendingUpdate(
   return { pending: { id, ...next }, person: personResult };
 }
 
-const SUPABASE_URL = 'https://akjiwfexxjgoaqakveco.supabase.co';
-
-async function supabaseRequest(secret: string, path: string, method: string, body?: JsonMap): Promise<unknown> {
-  const headers: Record<string, string> = {
-    apikey: secret,
-    Authorization: `Bearer ${secret}`,
-    'Content-Type': 'application/json',
-  };
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Supabase ${res.status}`);
+function authHeaders(request?: Request): Record<string, string> {
+  const token = request ? Token.from(request) : null;
+  if (!token) return {};
+  try {
+    return { 'X-Tabserver-Token': token.asSignedBase64() };
+  } catch {
+    return {};
   }
-  if (res.status === 204) return null;
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
 }
 
-export async function importPublicReplies(): Promise<JsonMap> {
-  const secret = await replySecret();
-  if (!secret) return { imported: 0, skipped: 0, note: 'Paste the Supabase secret key in Sending account and save it.' };
-  const rows = await supabaseRequest(
-    secret,
-    'candidate_replies?imported_at=is.null&select=id,token,action,fields&order=created_at.asc',
-    'GET',
-  ) as Array<{ id: string; token: string; action: string; fields?: JsonMap }>;
+async function listMailingTokens(): Promise<JsonMap[]> {
+  try {
+    const result = await structuredQuery(COLLECTIONS.mailingTokens, {
+      type: TYPES.mailingToken,
+      select: ['*'],
+      order: 'created-desc',
+      limit: 200,
+    });
+    return result.records.map(unwrap);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/not found/i.test(message)) return [];
+    throw error;
+  }
+}
+
+export async function importPublicReplies(request?: Request): Promise<JsonMap> {
+  const inbox = replyInboxUrl();
+  if (!inbox) return { imported: 0, skipped: 0 };
+  const headers = authHeaders(request);
   let imported = 0;
   let skipped = 0;
-  for (const row of rows || []) {
-    const action = row.action === 'opt_out' ? 'opt_out' : 'update';
+  for (const row of await listMailingTokens()) {
+    const id = String(row.id || row.token || '');
+    if (!id) continue;
+    const res = await fetch(`${inbox}/${encodeURIComponent(id)}.json`, { headers });
+    if (!res.ok) continue;
+    const body = await res.json().catch(() => ({})) as JsonMap;
+    const action = body.action === 'opt_out' ? 'opt_out' : 'update';
     const result = await submitTokenResponse({
-      token: String(row.token || ''),
+      token: id,
       action,
-      fields: row.fields || {},
+      fields: (body.fields as JsonMap) || {},
     });
     if (!result.ok) {
       skipped += 1;
       continue;
     }
     imported += 1;
-    await supabaseRequest(secret, `candidate_replies?id=eq.${row.id}`, 'PATCH', {
-      imported_at: new Date().toISOString(),
-    });
+    await fetch(`${inbox}/${encodeURIComponent(id)}.json`, { method: 'DELETE', headers }).catch(() => null);
   }
   return { imported, skipped };
 }

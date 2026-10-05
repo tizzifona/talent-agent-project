@@ -2,8 +2,6 @@ import { COLLECTIONS, TYPES, structuredGet, structuredQuery, structuredWrite } f
 import type { JsonMap } from './person-store.ts';
 
 const SETTINGS_ID = 'default';
-const LINKED_USER = 'testtalentagend@gmail.com';
-const LINKED_APP_PASSWORD = 'xkbrqnruigfeogyo';
 const BATCH_CAP = 10;
 
 export interface MailSettings {
@@ -113,7 +111,6 @@ export function publicMailSettings(settings: MailSettings): JsonMap {
     from_name: settings.from_name,
     daily_limit: settings.daily_limit,
     password_set: Boolean(settings.app_password),
-    reply_secret_set: false,
   };
 }
 
@@ -130,40 +127,15 @@ async function readSettingsRow(): Promise<JsonMap | null> {
 }
 
 function sendingUser(value: unknown): string {
-  const user = String(value || '').trim();
-  if (!user || user.toLowerCase() === 'tizzifona@gmail.com') return LINKED_USER;
-  return user;
+  return String(value || '').trim();
 }
 
-async function ensureLinkedMailbox(): Promise<MailSettings> {
-  const current = asSettings(await readSettingsRow());
-  const user = sendingUser(current.user);
-  if (user && current.app_password) return { ...current, user };
-  const next: MailSettings = {
-    ...current,
-    host: current.host || 'smtp.gmail.com',
-    port: current.port || 587,
-    user,
-    app_password: current.app_password || LINKED_APP_PASSWORD,
-    from_name: current.from_name || 'Blue Hope',
-  };
-  if (!next.user || !next.app_password) return next;
-  await structuredWrite(COLLECTIONS.mailSettings, TYPES.mailSettings, [{
-    id: SETTINGS_ID,
-    object: { ...next, updated_at: new Date().toISOString() },
-  }]);
-  return next;
-}
-
-export async function replySecret(): Promise<string> {
-  const row = await readSettingsRow();
-  return String(row?.reply_secret || '').trim();
+async function loadMailbox(): Promise<MailSettings> {
+  return asSettings(await readSettingsRow());
 }
 
 export async function getMailSettings(): Promise<JsonMap> {
-  const settings = publicMailSettings(await ensureLinkedMailbox());
-  settings.reply_secret_set = Boolean(await replySecret());
-  return settings;
+  return publicMailSettings(await loadMailbox());
 }
 
 export async function saveMailSettings(input: JsonMap): Promise<JsonMap> {
@@ -174,18 +146,17 @@ export async function saveMailSettings(input: JsonMap): Promise<JsonMap> {
     host: String(input.host || current.host || 'smtp.gmail.com').trim(),
     port: Number(input.port || current.port || 587),
     user: sendingUser(input.user || current.user),
-    app_password: nextPassword || current.app_password || LINKED_APP_PASSWORD,
+    app_password: nextPassword || current.app_password,
     from_name: String(input.from_name || current.from_name || 'Blue Hope').trim() || 'Blue Hope',
     daily_limit: clampLimit(input.daily_limit ?? current.daily_limit),
   };
-  if (!next.user) throw new Error('Enter the test Gmail address that owns the app password. The address in Send test to only receives the message.');
-  if (!next.app_password) throw new Error('Gmail app password is required');
-  const keptSecret = String(input.reply_secret || row?.reply_secret || '').trim();
+  if (!next.user) throw new Error('Enter the Gmail address that owns the app password.');
+  if (!next.app_password) throw new Error('Gmail app password is required. Paste it once and save. It stays in your daemon, not in the app files.');
   await structuredWrite(COLLECTIONS.mailSettings, TYPES.mailSettings, [{
     id: SETTINGS_ID,
-    object: { ...next, reply_secret: keptSecret, updated_at: new Date().toISOString() },
+    object: { ...next, updated_at: new Date().toISOString() },
   }]);
-  return { ...publicMailSettings(next), reply_secret_set: Boolean(keptSecret) };
+  return publicMailSettings(next);
 }
 
 function todayStamp(): string {
@@ -315,7 +286,7 @@ export async function deliverMessages(input: {
   allowRepeat?: boolean;
   campaignId?: string;
 }): Promise<JsonMap> {
-  const settings = await ensureLinkedMailbox();
+  const settings = await loadMailbox();
   if (!settings.user || !settings.app_password) {
     throw new Error('Gmail needs the address of the account that created the app password. Enter it in Test Gmail that sends.');
   }
@@ -395,7 +366,7 @@ export async function sendTestEmail(to: string, auth: JsonMap = {}): Promise<Jso
       port: 587,
     });
   }
-  const settings = await ensureLinkedMailbox();
+  const settings = await loadMailbox();
   const target = String(to || settings.user || '').trim();
   if (!target) throw new Error('Enter an address for the test message');
   const subject = 'Blue Hope test message';
