@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=15">
+    <link rel="stylesheet" href="app.css?v=16">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -155,7 +155,7 @@
           <div class="subnav" id="workspace-subnav">
             <button data-panel="people" class="active">People</button>
             <button data-panel="review">Review</button>
-            <button data-panel="approvals">Pending updates</button>
+            <button data-panel="approvals" id="approvals-tab">Pending updates</button>
           </div>
           <div id="workspace-filters" class="card filters-card">
             <div class="filters-bar">
@@ -326,7 +326,7 @@
             <div id="mailing-campaigns"></div>
           </section>
           <section class="card">
-            <h2>Pending candidate replies</h2>
+            <h2 id="mailing-pending-title">Pending candidate replies</h2>
             <div id="mailing-pending"></div>
           </section>
         </section>
@@ -440,7 +440,37 @@
         'job_title', 'years_of_experience', 'years_of_tech_experience', 'has_tech_experience',
         'github_url', 'technical_skills', 'key_skills', 'employment_status',
       ];
-      const FIELD_LABELS = Object.fromEntries(EDITABLE_FIELDS.map((f) => [f, f.replace(/_/g, ' ')]));
+      const FIELD_LABELS = {
+        first_name: 'First name',
+        last_names: 'Last names',
+        primary_email: 'Primary email',
+        secondary_email: 'Secondary email (optional)',
+        phone_number: 'Phone number',
+        preferred_contact_method: 'Preferred contact method',
+        linkedin_url: 'LinkedIn URL',
+        gender: 'Gender',
+        age: 'Age',
+        country_of_origin: 'Country of origin',
+        country_of_residence: 'Country of residence',
+        city_of_residence: 'City of residence',
+        legal_status: 'Legal status',
+        refugee_status: 'Refugee status',
+        work_permission: 'Work permission',
+        languages: 'Languages',
+        english_level: 'English level',
+        highest_education_level: 'Highest education level',
+        field_of_study: 'Field of study',
+        courses_and_certifications: 'Courses and certifications',
+        work_experience_summary: 'Work experience summary',
+        job_title: 'Job title',
+        years_of_experience: 'Years of experience',
+        years_of_tech_experience: 'Years of tech experience',
+        has_tech_experience: 'Has tech experience',
+        github_url: 'GitHub URL',
+        technical_skills: 'Technical skills',
+        key_skills: 'Key skills',
+        employment_status: 'Employment status',
+      };
       const CHAT_SYSTEM_PROMPT = `You are the Magic expert chat for Blue Hope Talent Agent on an open talent table.
 Help the operator find and understand candidates quickly. Answer from the product and structured memory when needed.
 Use search_people for candidate lookup. search, country, and skills apply together. Comma-separated skills must all match.
@@ -704,6 +734,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
           this.workspacePanel = 'people';
           this.peopleColGroups = 1;
           this.reviewColGroups = 1;
+          this.pendingById = {};
           this.MAX_FILES = 10;
         }
 
@@ -843,12 +874,10 @@ Do not invent employment_status. refugee_status is sensitive.`;
             if (btn) this.selectTemplate(btn.dataset.templateId);
           });
           document.getElementById('mailing-pending').addEventListener('click', (event) => {
-            const btn = event.target.closest('[data-pending-action]');
-            if (btn) this.reviewPending(btn.dataset.pendingId, btn.dataset.pendingAction);
+            this.handlePendingClick(event);
           });
           document.getElementById('pending-list').addEventListener('click', (event) => {
-            const btn = event.target.closest('[data-pending-action]');
-            if (btn) this.reviewPending(btn.dataset.pendingId, btn.dataset.pendingAction);
+            this.handlePendingClick(event);
           });
 
           document.getElementById('select-files-btn').addEventListener('click', () => {
@@ -1093,9 +1122,13 @@ Do not invent employment_status. refugee_status is sensitive.`;
           document.getElementById('workspace-filters').classList.toggle('hidden', panel === 'approvals');
           document.getElementById('people-add-btn').style.display = panel === 'people' ? '' : 'none';
           this.rememberPlace();
-          if (panel === 'review') return this.loadReview();
+          if (panel === 'review') {
+            this.loadPendingUpdates('pending-list');
+            return this.loadReview();
+          }
           if (panel === 'people') {
             this.loadSavedLists();
+            this.loadPendingUpdates('pending-list');
             return this.loadPeople();
           }
           if (panel === 'approvals') return this.loadPendingUpdates('pending-list');
@@ -2447,6 +2480,35 @@ Do not invent employment_status. refugee_status is sensitive.`;
           }
         }
 
+        pendingPersonName(item) {
+          const snap = item.previous_snapshot || {};
+          const proposed = item.proposed_fields || {};
+          return [proposed.first_name || snap.first_name, proposed.last_names || snap.last_names]
+            .filter(Boolean)
+            .join(' ') || item.person_id || 'Candidate';
+        }
+
+        pendingChanges(item) {
+          const previous = item.previous_snapshot || {};
+          const proposed = item.proposed_fields || {};
+          return Object.keys({ ...previous, ...proposed })
+            .filter((key) => FIELD_LABELS[key])
+            .filter((key) => String(previous[key] || '') !== String(proposed[key] || ''))
+            .map((key) => ({
+              key,
+              label: FIELD_LABELS[key],
+              before: String(previous[key] || '—'),
+              after: String(proposed[key] || '—'),
+            }));
+        }
+
+        setPendingCount(count) {
+          const tab = document.getElementById('approvals-tab');
+          if (tab) tab.textContent = count ? `Pending updates (${count})` : 'Pending updates';
+          const title = document.getElementById('mailing-pending-title');
+          if (title) title.textContent = count ? `Pending candidate replies (${count})` : 'Pending candidate replies';
+        }
+
         async loadPendingUpdates(targetId) {
           const el = document.getElementById(targetId);
           if (!el) return;
@@ -2458,38 +2520,68 @@ Do not invent employment_status. refugee_status is sensitive.`;
               status: 'pending',
             });
             const records = result.records || [];
+            this.pendingById = Object.fromEntries(records.map((item) => [item.id, item]));
+            this.setPendingCount(records.length);
             if (!records.length) {
               el.innerHTML = '<p class="upload-hint">No pending candidate replies.</p>';
               return;
             }
             el.innerHTML = records.map((item) => {
-              const proposed = item.proposed_fields || {};
-              const changes = Object.entries(proposed)
-                .filter(([, value]) => String(value || '').trim())
-                .slice(0, 8)
-                .map(([key, value]) => `${key}: ${value}`)
-                .join(' · ');
+              const changes = this.pendingChanges(item);
+              const name = this.pendingPersonName(item);
               return `
-                <div class="pending-item">
+                <div class="pending-item" data-pending-wrap="${escapeHtml(item.id)}">
                   <div>
-                    <strong>${escapeHtml(item.action === 'opt_out' ? 'Opt-out' : 'Update')} · ${escapeHtml(item.person_id || '')}</strong>
-                    <div class="upload-hint">${escapeHtml(changes || 'No field changes')} · ${escapeHtml(item.created_at ? new Date(item.created_at).toLocaleString() : '')}</div>
+                    <strong>${escapeHtml(item.action === 'opt_out' ? 'Opt-out' : 'Update')} · ${escapeHtml(name)}</strong>
+                    <div class="upload-hint">${changes.length} ${changes.length === 1 ? 'field changed' : 'fields changed'} · ${escapeHtml(item.created_at ? new Date(item.created_at).toLocaleString() : '')}</div>
                   </div>
                   <div class="row-actions">
+                    <button class="action-btn" data-pending-action="preview" data-pending-id="${escapeHtml(item.id)}">Preview</button>
                     <button class="action-btn" data-pending-action="approve" data-pending-id="${escapeHtml(item.id)}">Approve</button>
                     <button class="action-btn danger" data-pending-action="reject" data-pending-id="${escapeHtml(item.id)}">Reject</button>
                   </div>
+                  <div class="pending-preview" hidden></div>
                 </div>
               `;
             }).join('');
           } catch (error) {
             const message = String(error?.message || error);
             if (/not found/i.test(message)) {
+              this.setPendingCount(0);
               el.innerHTML = '<p class="upload-hint">No pending candidate replies.</p>';
               return;
             }
             el.innerHTML = `<p class="upload-hint">${escapeHtml(message)}</p>`;
           }
+        }
+
+        handlePendingClick(event) {
+          const btn = event.target.closest('[data-pending-action]');
+          if (!btn) return;
+          if (btn.dataset.pendingAction === 'preview') {
+            this.togglePendingPreview(btn.dataset.pendingId);
+            return;
+          }
+          this.reviewPending(btn.dataset.pendingId, btn.dataset.pendingAction);
+        }
+
+        togglePendingPreview(id) {
+          const wrap = document.querySelector(`[data-pending-wrap="${id}"]`);
+          const box = wrap?.querySelector('.pending-preview');
+          if (!box) return;
+          if (!box.hidden) {
+            box.hidden = true;
+            box.innerHTML = '';
+            return;
+          }
+          const item = this.pendingById[id] || {};
+          const changes = this.pendingChanges(item);
+          box.innerHTML = changes.length
+            ? `<table class="pending-diff"><thead><tr><th>Field</th><th>Current</th><th>Proposed</th></tr></thead><tbody>${
+              changes.map((row) => `<tr><td>${escapeHtml(row.label)}</td><td>${escapeHtml(row.before)}</td><td>${escapeHtml(row.after)}</td></tr>`).join('')
+            }</tbody></table>`
+            : '<p class="upload-hint">No field changes in this reply.</p>';
+          box.hidden = false;
         }
 
         async reviewPending(id, decision) {
@@ -2552,7 +2644,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
           if (!inbox) {
             throw new Error('This link cannot deliver a reply. Ask Blue Hope to send a new personal link.');
           }
-          const response = await fetch(`${inbox}/${encodeURIComponent(this.candidateToken)}.json`, {
+          const response = await fetch(`${inbox}/${encodeURIComponent(`${this.candidateToken}-${Date.now()}`)}.json`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

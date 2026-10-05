@@ -563,8 +563,9 @@ export async function submitTokenResponse(input: {
       ...Object.fromEntries(
         Object.entries(tokenData).filter(([key]) => key !== 'id'),
       ),
-      status: 'used',
+      status: input.action === 'opt_out' ? 'used' : 'active',
       used_at: now,
+      reply_count: Number(tokenData.reply_count || 0) + 1,
       pending_id: pendingId,
     },
   }]);
@@ -662,21 +663,53 @@ async function listMailingTokens(): Promise<JsonMap[]> {
   }
 }
 
+function fileName(path: string): string {
+  return String(path || '').split('/').pop() || '';
+}
+
+async function listReplyFiles(inbox: string, headers: Record<string, string>): Promise<string[]> {
+  const res = await fetch(`${inbox}/`, { headers });
+  if (!res.ok) return [];
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text) as unknown;
+    const rows = Array.isArray(data)
+      ? data
+      : (data && typeof data === 'object'
+        ? (data as { records?: unknown[]; files?: unknown[]; items?: unknown[] }).records
+          || (data as { files?: unknown[] }).files
+          || (data as { items?: unknown[] }).items
+          || []
+        : []);
+    return rows
+      .map((row) => fileName(String((row as { name?: string; path?: string })?.name || (row as { path?: string })?.path || row)))
+      .filter((name) => name.endsWith('.json'));
+  } catch {
+    return [...text.matchAll(/[\w.-]+\.json/g)].map((match) => match[0]);
+  }
+}
+
 export async function importPublicReplies(request?: Request): Promise<JsonMap> {
   const inbox = replyInboxUrl();
   if (!inbox) return { imported: 0, skipped: 0 };
   const headers = authHeaders(request);
+  const tokens = await listMailingTokens();
+  const names = new Set(await listReplyFiles(inbox, headers));
+  for (const row of tokens) {
+    const id = String(row.id || row.token || '');
+    if (id) names.add(`${id}.json`);
+  }
   let imported = 0;
   let skipped = 0;
-  for (const row of await listMailingTokens()) {
-    const id = String(row.id || row.token || '');
-    if (!id) continue;
-    const res = await fetch(`${inbox}/${encodeURIComponent(id)}.json`, { headers });
+  for (const name of names) {
+    const token = name.replace(/\.json$/i, '').replace(/-\d+$/, '');
+    if (!token) continue;
+    const res = await fetch(`${inbox}/${encodeURIComponent(name)}`, { headers });
     if (!res.ok) continue;
     const body = await res.json().catch(() => ({})) as JsonMap;
     const action = body.action === 'opt_out' ? 'opt_out' : 'update';
     const result = await submitTokenResponse({
-      token: id,
+      token: String(body.token || token),
       action,
       fields: (body.fields as JsonMap) || {},
     });
@@ -685,7 +718,7 @@ export async function importPublicReplies(request?: Request): Promise<JsonMap> {
       continue;
     }
     imported += 1;
-    await fetch(`${inbox}/${encodeURIComponent(id)}.json`, { method: 'DELETE', headers }).catch(() => null);
+    await fetch(`${inbox}/${encodeURIComponent(name)}`, { method: 'DELETE', headers }).catch(() => null);
   }
   return { imported, skipped };
 }
