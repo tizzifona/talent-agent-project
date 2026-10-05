@@ -251,14 +251,21 @@ function countryField(id, value) {
 
 function phoneField(id, value) {
   const parts = splitPhone(value);
+  const current = COUNTRIES.find((row) => row.dial === parts.dial) || COUNTRIES[0];
   const options = COUNTRIES.map((row) => {
-    const selected = row.dial === parts.dial ? ' selected' : '';
     const flag = flagEmoji(row.iso);
-    return `<option value="${escapeHtml(row.dial)}"${selected}>${flag} ${escapeHtml(row.name)} ${escapeHtml(row.dial)}</option>`;
+    return `<button type="button" data-dial="${escapeHtml(row.dial)}" data-iso="${escapeHtml(row.iso)}">${flag} ${escapeHtml(row.name)} ${escapeHtml(row.dial)}</button>`;
   }).join('');
   return `
     <div class="phone-row">
-      <select id="${id}-dial" aria-label="Country code">${options}</select>
+      <div class="combo dial-combo">
+        <button type="button" class="dial-toggle" id="${id}-dial-toggle">${flagEmoji(current.iso)} ${escapeHtml(current.dial)}</button>
+        <input type="hidden" id="${id}-dial" value="${escapeHtml(current.dial)}">
+        <div class="combo-list" hidden>
+          <input type="search" class="dial-search" placeholder="Search country" autocomplete="off">
+          ${options}
+        </div>
+      </div>
       <input id="${id}" type="tel" inputmode="tel" value="${escapeHtml(parts.national)}" placeholder="Phone number">
     </div>
   `;
@@ -312,6 +319,41 @@ export function bindEnhancedFields(root, getJobTitle) {
       if (!button) return;
       input.value = button.dataset.country;
       list.hidden = true;
+    });
+  });
+
+  root.querySelectorAll('.dial-combo').forEach((combo) => {
+    const toggle = combo.querySelector('.dial-toggle');
+    const hidden = combo.querySelector('input[type="hidden"]');
+    const list = combo.querySelector('.combo-list');
+    const search = combo.querySelector('.dial-search');
+    const filterOptions = () => {
+      const query = String(search?.value || '').trim().toLowerCase();
+      list.querySelectorAll('[data-dial]').forEach((button) => {
+        button.hidden = Boolean(query) && !button.textContent.toLowerCase().includes(query);
+      });
+    };
+    toggle.addEventListener('click', () => {
+      list.hidden = !list.hidden;
+      if (!list.hidden) {
+        if (search) {
+          search.value = '';
+          filterOptions();
+          search.focus();
+        }
+      }
+    });
+    search?.addEventListener('input', filterOptions);
+    list.addEventListener('mousedown', (event) => {
+      if (event.target.closest('.dial-search')) return;
+      const button = event.target.closest('[data-dial]');
+      if (!button) return;
+      hidden.value = button.dataset.dial;
+      toggle.textContent = `${flagEmoji(button.dataset.iso)} ${button.dataset.dial}`;
+      list.hidden = true;
+    });
+    document.addEventListener('mousedown', (event) => {
+      if (!combo.contains(event.target)) list.hidden = true;
     });
   });
 
