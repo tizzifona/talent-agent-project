@@ -504,8 +504,8 @@ export async function getTokenPayload(token: string): Promise<JsonMap> {
   const record = await structuredGet(COLLECTIONS.mailingTokens, token);
   if (!record) return { valid: false, error: 'Link not found' };
   const data = unwrap(record);
-  if (data.status === 'used' || data.status === 'revoked') {
-    return { valid: false, error: 'This link was already used or revoked', token: data };
+  if (data.status === 'revoked') {
+    return { valid: false, error: 'This link was revoked', token: data };
   }
   if (tokenExpired(data)) {
     return { valid: false, error: 'This link expired after 3 days', token: data };
@@ -563,7 +563,7 @@ export async function submitTokenResponse(input: {
       ...Object.fromEntries(
         Object.entries(tokenData).filter(([key]) => key !== 'id'),
       ),
-      status: input.action === 'opt_out' ? 'used' : 'active',
+      status: input.action === 'opt_out' ? 'revoked' : 'active',
       used_at: now,
       reply_count: Number(tokenData.reply_count || 0) + 1,
       pending_id: pendingId,
@@ -584,19 +584,19 @@ export async function listPendingUpdates(filter: {
   runId?: string;
   status?: string;
 } = {}): Promise<JsonMap[]> {
-  const queryFilter: JsonMap = {};
-  if (filter.tableId) queryFilter.table_id = filter.tableId;
-  if (filter.runId) queryFilter.run_id = filter.runId;
-  if (filter.status) queryFilter.status = filter.status;
   try {
     const result = await structuredQuery(COLLECTIONS.pendingUpdates, {
       type: TYPES.pendingUpdate,
-      filter: queryFilter,
       select: ['*'],
       order: 'created-desc',
       limit: 100,
     });
-    return result.records.map(unwrap);
+    return result.records.map(unwrap).filter((row) => {
+      if (filter.status && String(row.status || 'pending') !== filter.status) return false;
+      if (filter.tableId && row.table_id && String(row.table_id) !== String(filter.tableId)) return false;
+      if (filter.runId && row.run_id && String(row.run_id) !== String(filter.runId)) return false;
+      return true;
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (/not found/i.test(message)) return [];
@@ -667,26 +667,32 @@ function fileName(path: string): string {
   return String(path || '').split('/').pop() || '';
 }
 
+function replyRows(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== 'object') return [];
+  const row = data as Record<string, unknown>;
+  if (Array.isArray(row.ok)) return row.ok;
+  if (row.ok && typeof row.ok === 'object') return replyRows(row.ok);
+  return (row.records as unknown[]) || (row.files as unknown[]) || (row.items as unknown[]) || [];
+}
+
 async function listReplyFiles(inbox: string, headers: Record<string, string>): Promise<string[]> {
-  const res = await fetch(`${inbox}/`, { headers });
-  if (!res.ok) return [];
-  const text = await res.text();
-  try {
-    const data = JSON.parse(text) as unknown;
-    const rows = Array.isArray(data)
-      ? data
-      : (data && typeof data === 'object'
-        ? (data as { records?: unknown[]; files?: unknown[]; items?: unknown[] }).records
-          || (data as { files?: unknown[] }).files
-          || (data as { items?: unknown[] }).items
-          || []
-        : []);
-    return rows
-      .map((row) => fileName(String((row as { name?: string; path?: string })?.name || (row as { path?: string })?.path || row)))
-      .filter((name) => name.endsWith('.json'));
-  } catch {
-    return [...text.matchAll(/[\w.-]+\.json/g)].map((match) => match[0]);
+  const urls = [`${inbox}/`, inbox];
+  for (const url of urls) {
+    const res = await fetch(url, { headers });
+    if (!res.ok) continue;
+    const text = await res.text();
+    try {
+      const names = replyRows(JSON.parse(text))
+        .map((row) => fileName(String((row as { name?: string; path?: string })?.name || (row as { path?: string })?.path || row)))
+        .filter((name) => name.endsWith('.json'));
+      if (names.length) return names;
+    } catch {
+      const names = [...text.matchAll(/[\w.-]+\.json/g)].map((match) => match[0]);
+      if (names.length) return names;
+    }
   }
+  return [];
 }
 
 export async function importPublicReplies(request?: Request): Promise<JsonMap> {
@@ -702,14 +708,14 @@ export async function importPublicReplies(request?: Request): Promise<JsonMap> {
   let imported = 0;
   let skipped = 0;
   for (const name of names) {
-    const token = name.replace(/\.json$/i, '').replace(/-\d+$/, '');
-    if (!token) continue;
     const res = await fetch(`${inbox}/${encodeURIComponent(name)}`, { headers });
     if (!res.ok) continue;
     const body = await res.json().catch(() => ({})) as JsonMap;
+    const token = String(body.token || name.replace(/\.json$/i, '').replace(/-\d+$/, ''));
+    if (!token) continue;
     const action = body.action === 'opt_out' ? 'opt_out' : 'update';
     const result = await submitTokenResponse({
-      token: String(body.token || token),
+      token,
       action,
       fields: (body.fields as JsonMap) || {},
     });

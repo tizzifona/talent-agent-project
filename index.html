@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=16">
+    <link rel="stylesheet" href="app.css?v=17">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -409,7 +409,7 @@
     </div>
 
     <script type="module">
-      import { bindEnhancedFields, enhancedControl, readEnhancedValue } from './form-assist.js';
+      import { bindEnhancedFields, enhancedControl, readEnhancedValue } from './form-assist.js?v=2';
       const DAEMON_SDK = 'https://webdaemon.online/latest/static/lib/dist/index.js';
       const PAGE_SIZE = 25;
       const COLUMN_PAGE = 5;
@@ -1678,7 +1678,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
         renderFieldInputs(containerId, values = {}, prefix = 'field', enhanced = false) {
           const container = document.getElementById(containerId);
           container.innerHTML = EDITABLE_FIELDS.map((field) => `
-            <div class="setting-item">
+            <div class="setting-item${field === 'phone_number' ? ' wide' : ''}">
               <label for="${prefix}-${field}">${escapeHtml(FIELD_LABELS[field] || field)}</label>
               ${enhanced
                 ? enhancedControl(field, `${prefix}-${field}`, values[field] || '')
@@ -2514,11 +2514,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
           if (!el) return;
           try {
             await this.agentPost('/mailing/replies/import', {}).catch(() => null);
-            const result = await this.agentPost('/mailing/pending', {
-              tableId: this.currentTable?.id,
-              runId: this.currentTable?.run_id,
-              status: 'pending',
-            });
+            const result = await this.agentPost('/mailing/pending', { status: 'pending' });
             const records = result.records || [];
             this.pendingById = Object.fromEntries(records.map((item) => [item.id, item]));
             this.setPendingCount(records.length);
@@ -2644,7 +2640,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
           if (!inbox) {
             throw new Error('This link cannot deliver a reply. Ask Blue Hope to send a new personal link.');
           }
-          const response = await fetch(`${inbox}/${encodeURIComponent(`${this.candidateToken}-${Date.now()}`)}.json`, {
+          const response = await fetch(`${inbox}/${encodeURIComponent(this.candidateToken)}.json`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
