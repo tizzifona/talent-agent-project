@@ -8,94 +8,142 @@ export const LANGUAGE_LEVELS = [
   { value: 'Native', label: 'Native' },
 ];
 
+export const GENDER_OPTIONS = [
+  { value: 'Woman', label: 'Woman' },
+  { value: 'Man', label: 'Man' },
+  { value: 'Non-binary', label: 'Non-binary' },
+  { value: 'Prefer not to say', label: 'Prefer not to say' },
+];
+
+export const CONTACT_METHODS = [
+  { value: 'Email', label: 'Email' },
+  { value: 'Phone', label: 'Phone' },
+  { value: 'WhatsApp', label: 'WhatsApp' },
+  { value: 'LinkedIn', label: 'LinkedIn' },
+];
+
+export const YES_NO_OPTIONS = [
+  { value: 'Yes', label: 'Yes' },
+  { value: 'No', label: 'No' },
+  { value: 'Prefer not to answer', label: 'Prefer not to answer' },
+];
+
+export const EXPERIENCE_YEARS = [
+  { value: '0-1', label: '0–1 year' },
+  { value: '1-3', label: '1–3 years' },
+  { value: '3-5', label: '3–5 years' },
+  { value: '5+', label: '5+ years' },
+  { value: '10+', label: '10+ years' },
+  { value: '15+', label: '15+ years' },
+];
+
+export const EMPLOYMENT_OPTIONS = [
+  { value: 'Unemployed, looking for work', label: 'No job, looking for work' },
+  { value: 'Unemployed, not looking', label: 'No job, not looking right now' },
+  { value: 'Freelance', label: 'Freelance / contract' },
+  { value: 'Employed, open to offers', label: 'Permanent job, open to offers' },
+  { value: 'Employed, not looking', label: 'Permanent job, not interested in new offers' },
+];
+
+export const AGE_OPTIONS = Array.from({ length: 60 }, (_, index) => {
+  const age = String(16 + index);
+  return { value: age, label: age };
+});
+
 export const COUNTRIES = [
-  { name: 'Ukraine', dial: '+380' },
-  { name: 'Poland', dial: '+48' },
-  { name: 'Germany', dial: '+49' },
-  { name: 'Czechia', dial: '+420' },
-  { name: 'Slovakia', dial: '+421' },
-  { name: 'Romania', dial: '+40' },
-  { name: 'Hungary', dial: '+36' },
-  { name: 'Moldova', dial: '+373' },
-  { name: 'Lithuania', dial: '+370' },
-  { name: 'Latvia', dial: '+371' },
-  { name: 'Estonia', dial: '+372' },
-  { name: 'Georgia', dial: '+995' },
-  { name: 'Armenia', dial: '+374' },
-  { name: 'Azerbaijan', dial: '+994' },
-  { name: 'Turkey', dial: '+90' },
-  { name: 'Spain', dial: '+34' },
-  { name: 'Portugal', dial: '+351' },
-  { name: 'Italy', dial: '+39' },
-  { name: 'France', dial: '+33' },
-  { name: 'Netherlands', dial: '+31' },
-  { name: 'Belgium', dial: '+32' },
-  { name: 'Austria', dial: '+43' },
-  { name: 'Switzerland', dial: '+41' },
-  { name: 'United Kingdom', dial: '+44' },
-  { name: 'Ireland', dial: '+353' },
-  { name: 'Sweden', dial: '+46' },
-  { name: 'Norway', dial: '+47' },
-  { name: 'Denmark', dial: '+45' },
-  { name: 'Finland', dial: '+358' },
-  { name: 'Greece', dial: '+30' },
-  { name: 'Bulgaria', dial: '+359' },
-  { name: 'Croatia', dial: '+385' },
-  { name: 'Serbia', dial: '+381' },
-  { name: 'Slovenia', dial: '+386' },
-  { name: 'Bosnia and Herzegovina', dial: '+387' },
-  { name: 'North Macedonia', dial: '+389' },
-  { name: 'Albania', dial: '+355' },
-  { name: 'Montenegro', dial: '+382' },
-  { name: 'Cyprus', dial: '+357' },
-  { name: 'Malta', dial: '+356' },
-  { name: 'United States', dial: '+1' },
-  { name: 'Canada', dial: '+1' },
-  { name: 'Mexico', dial: '+52' },
-  { name: 'Brazil', dial: '+55' },
-  { name: 'Argentina', dial: '+54' },
-  { name: 'Colombia', dial: '+57' },
-  { name: 'Chile', dial: '+56' },
-  { name: 'Israel', dial: '+972' },
-  { name: 'United Arab Emirates', dial: '+971' },
-  { name: 'India', dial: '+91' },
-  { name: 'Pakistan', dial: '+92' },
-  { name: 'Bangladesh', dial: '+880' },
-  { name: 'China', dial: '+86' },
-  { name: 'Japan', dial: '+81' },
-  { name: 'South Korea', dial: '+82' },
-  { name: 'Vietnam', dial: '+84' },
-  { name: 'Thailand', dial: '+66' },
-  { name: 'Indonesia', dial: '+62' },
-  { name: 'Philippines', dial: '+63' },
-  { name: 'Malaysia', dial: '+60' },
-  { name: 'Singapore', dial: '+65' },
-  { name: 'Australia', dial: '+61' },
-  { name: 'New Zealand', dial: '+64' },
-  { name: 'South Africa', dial: '+27' },
-  { name: 'Nigeria', dial: '+234' },
-  { name: 'Kenya', dial: '+254' },
-  { name: 'Egypt', dial: '+20' },
-  { name: 'Morocco', dial: '+212' },
-  { name: 'Tunisia', dial: '+216' },
-  { name: 'Kazakhstan', dial: '+7' },
-  { name: 'Uzbekistan', dial: '+998' },
-  { name: 'Kyrgyzstan', dial: '+996' },
-  { name: 'Tajikistan', dial: '+992' },
-  { name: 'Belarus', dial: '+375' },
+  { name: 'Ukraine', dial: '+380', iso: 'UA' },
+  { name: 'Poland', dial: '+48', iso: 'PL' },
+  { name: 'Germany', dial: '+49', iso: 'DE' },
+  { name: 'Czechia', dial: '+420', iso: 'CZ' },
+  { name: 'Slovakia', dial: '+421', iso: 'SK' },
+  { name: 'Romania', dial: '+40', iso: 'RO' },
+  { name: 'Hungary', dial: '+36', iso: 'HU' },
+  { name: 'Moldova', dial: '+373', iso: 'MD' },
+  { name: 'Lithuania', dial: '+370', iso: 'LT' },
+  { name: 'Latvia', dial: '+371', iso: 'LV' },
+  { name: 'Estonia', dial: '+372', iso: 'EE' },
+  { name: 'Georgia', dial: '+995', iso: 'GE' },
+  { name: 'Armenia', dial: '+374', iso: 'AM' },
+  { name: 'Azerbaijan', dial: '+994', iso: 'AZ' },
+  { name: 'Turkey', dial: '+90', iso: 'TR' },
+  { name: 'Spain', dial: '+34', iso: 'ES' },
+  { name: 'Portugal', dial: '+351', iso: 'PT' },
+  { name: 'Italy', dial: '+39', iso: 'IT' },
+  { name: 'France', dial: '+33', iso: 'FR' },
+  { name: 'Netherlands', dial: '+31', iso: 'NL' },
+  { name: 'Belgium', dial: '+32', iso: 'BE' },
+  { name: 'Austria', dial: '+43', iso: 'AT' },
+  { name: 'Switzerland', dial: '+41', iso: 'CH' },
+  { name: 'United Kingdom', dial: '+44', iso: 'GB' },
+  { name: 'Ireland', dial: '+353', iso: 'IE' },
+  { name: 'Sweden', dial: '+46', iso: 'SE' },
+  { name: 'Norway', dial: '+47', iso: 'NO' },
+  { name: 'Denmark', dial: '+45', iso: 'DK' },
+  { name: 'Finland', dial: '+358', iso: 'FI' },
+  { name: 'Greece', dial: '+30', iso: 'GR' },
+  { name: 'Bulgaria', dial: '+359', iso: 'BG' },
+  { name: 'Croatia', dial: '+385', iso: 'HR' },
+  { name: 'Serbia', dial: '+381', iso: 'RS' },
+  { name: 'Slovenia', dial: '+386', iso: 'SI' },
+  { name: 'Bosnia and Herzegovina', dial: '+387', iso: 'BA' },
+  { name: 'North Macedonia', dial: '+389', iso: 'MK' },
+  { name: 'Albania', dial: '+355', iso: 'AL' },
+  { name: 'Montenegro', dial: '+382', iso: 'ME' },
+  { name: 'Cyprus', dial: '+357', iso: 'CY' },
+  { name: 'Malta', dial: '+356', iso: 'MT' },
+  { name: 'United States', dial: '+1', iso: 'US' },
+  { name: 'Canada', dial: '+1', iso: 'CA' },
+  { name: 'Mexico', dial: '+52', iso: 'MX' },
+  { name: 'Brazil', dial: '+55', iso: 'BR' },
+  { name: 'Argentina', dial: '+54', iso: 'AR' },
+  { name: 'Colombia', dial: '+57', iso: 'CO' },
+  { name: 'Chile', dial: '+56', iso: 'CL' },
+  { name: 'Israel', dial: '+972', iso: 'IL' },
+  { name: 'United Arab Emirates', dial: '+971', iso: 'AE' },
+  { name: 'India', dial: '+91', iso: 'IN' },
+  { name: 'Pakistan', dial: '+92', iso: 'PK' },
+  { name: 'Bangladesh', dial: '+880', iso: 'BD' },
+  { name: 'China', dial: '+86', iso: 'CN' },
+  { name: 'Japan', dial: '+81', iso: 'JP' },
+  { name: 'South Korea', dial: '+82', iso: 'KR' },
+  { name: 'Vietnam', dial: '+84', iso: 'VN' },
+  { name: 'Thailand', dial: '+66', iso: 'TH' },
+  { name: 'Indonesia', dial: '+62', iso: 'ID' },
+  { name: 'Philippines', dial: '+63', iso: 'PH' },
+  { name: 'Malaysia', dial: '+60', iso: 'MY' },
+  { name: 'Singapore', dial: '+65', iso: 'SG' },
+  { name: 'Australia', dial: '+61', iso: 'AU' },
+  { name: 'New Zealand', dial: '+64', iso: 'NZ' },
+  { name: 'South Africa', dial: '+27', iso: 'ZA' },
+  { name: 'Nigeria', dial: '+234', iso: 'NG' },
+  { name: 'Kenya', dial: '+254', iso: 'KE' },
+  { name: 'Egypt', dial: '+20', iso: 'EG' },
+  { name: 'Morocco', dial: '+212', iso: 'MA' },
+  { name: 'Tunisia', dial: '+216', iso: 'TN' },
+  { name: 'Kazakhstan', dial: '+7', iso: 'KZ' },
+  { name: 'Uzbekistan', dial: '+998', iso: 'UZ' },
+  { name: 'Kyrgyzstan', dial: '+996', iso: 'KG' },
+  { name: 'Tajikistan', dial: '+992', iso: 'TJ' },
+  { name: 'Belarus', dial: '+375', iso: 'BY' },
 ];
 
 const SKILL_STACKS = {
   frontend: ['HTML', 'CSS', 'JavaScript', 'TypeScript', 'React', 'Vue', 'Angular', 'Next.js', 'Svelte', 'Tailwind'],
   backend: ['Node.js', 'Express', 'Python', 'Django', 'FastAPI', 'Java', 'Spring', 'C#', '.NET', 'Go', 'PHP', 'Laravel', 'Ruby', 'Rails'],
-  data: ['SQL', 'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Pandas', 'NumPy', 'Power BI', 'Tableau', 'Excel'],
+  data: ['SQL', 'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'Pandas', 'Power BI', 'Tableau', 'Excel'],
   devops: ['Docker', 'Kubernetes', 'AWS', 'Azure', 'GCP', 'Linux', 'Git', 'CI/CD', 'Terraform'],
   mobile: ['React Native', 'Flutter', 'Swift', 'Kotlin', 'Android', 'iOS'],
   design: ['Figma', 'UX', 'UI', 'Adobe XD', 'Product Design'],
   product: ['Product Management', 'Agile', 'Scrum', 'Jira', 'User Research'],
-  qa: ['QA', 'Cypress', 'Playwright', 'Selenium', 'Jest', 'Testing'],
-  ai: ['Python', 'Machine Learning', 'PyTorch', 'TensorFlow', 'NLP', 'LLM'],
+  qa: ['QA', 'Cypress', 'Playwright', 'Selenium', 'Jest', 'Manual testing'],
+  ai: ['Machine Learning', 'PyTorch', 'TensorFlow', 'NLP', 'LLM'],
+  business: ['Project Management', 'Customer Support', 'Sales', 'Recruiting', 'HR', 'Teaching', 'Marketing', 'Copywriting'],
 };
+
+const STARTER_SKILLS = [
+  'JavaScript', 'Python', 'SQL', 'Excel', 'Figma', 'Java', 'Project Management',
+  'Customer Support', 'PHP', 'Sales', 'QA', 'Teaching', 'React', 'AWS',
+];
 
 const TITLE_STACK = [
   [/front|react|vue|angular|ui engineer/i, 'frontend'],
@@ -108,6 +156,7 @@ const TITLE_STACK = [
   [/product|pm\b|owner/i, 'product'],
   [/qa|test|sdet/i, 'qa'],
   [/ml|ai |machine learning|nlp/i, 'ai'],
+  [/support|sales|recruit|hr|teach|market/i, 'business'],
 ];
 
 export function escapeHtml(value) {
@@ -118,35 +167,43 @@ export function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
+export function flagEmoji(iso) {
+  const code = String(iso || '').toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return '';
+  return [...code].map((char) => String.fromCodePoint(127397 + char.charCodeAt(0))).join('');
+}
+
 function allSkills() {
   return [...new Set(Object.values(SKILL_STACKS).flat())];
+}
+
+function stackFromSkills(selected) {
+  const scores = Object.entries(SKILL_STACKS).map(([key, skills]) => ([
+    key,
+    selected.filter((item) => skills.some((skill) => skill.toLowerCase() === item.toLowerCase())).length,
+  ]));
+  scores.sort((a, b) => b[1] - a[1]);
+  return scores[0]?.[1] ? scores[0][0] : '';
 }
 
 export function suggestSkills(jobTitle = '', query = '', selected = []) {
   const taken = new Set(selected.map((item) => item.toLowerCase()));
   const titleKey = TITLE_STACK.find(([pattern]) => pattern.test(jobTitle))?.[1];
+  const chosenKey = stackFromSkills(selected);
   const q = query.trim().toLowerCase();
-  const preferred = titleKey ? SKILL_STACKS[titleKey] : [];
-  const pool = [...preferred, ...allSkills()];
+  const preferredKey = chosenKey || titleKey;
+  const preferred = preferredKey ? SKILL_STACKS[preferredKey] : STARTER_SKILLS;
+  const pool = selected.length || titleKey ? [...preferred, ...allSkills()] : [...STARTER_SKILLS, ...allSkills()];
   return [...new Set(pool)]
     .filter((skill) => !taken.has(skill.toLowerCase()))
     .filter((skill) => !q || skill.toLowerCase().includes(q))
-    .slice(0, 8);
-}
-
-export function matchCountry(value) {
-  const text = String(value || '').trim().toLowerCase();
-  if (!text) return null;
-  return COUNTRIES.find((row) => row.name.toLowerCase() === text)
-    || COUNTRIES.find((row) => row.name.toLowerCase().startsWith(text))
-    || COUNTRIES.find((row) => row.name.toLowerCase().includes(text))
-    || null;
+    .slice(0, 10);
 }
 
 export function filterCountries(query) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return COUNTRIES.slice(0, 12);
-  return COUNTRIES.filter((row) => row.name.toLowerCase().includes(q)).slice(0, 12);
+  return COUNTRIES.filter((row) => row.name.toLowerCase().includes(q) || row.dial.includes(q)).slice(0, 12);
 }
 
 export function splitPhone(value) {
@@ -165,6 +222,23 @@ export function joinPhone(dial, national) {
   return `${dial}${digits}`;
 }
 
+function withCurrentOption(options, value) {
+  const current = String(value || '').trim();
+  if (!current) return options;
+  if (options.some((row) => String(row.value).toLowerCase() === current.toLowerCase())) return options;
+  return [{ value: current, label: current }, ...options];
+}
+
+function selectField(id, value, options, placeholder) {
+  const current = String(value || '').trim();
+  const rows = withCurrentOption(options, current);
+  const html = [`<option value="">${escapeHtml(placeholder)}</option>`].concat(rows.map((row) => {
+    const selected = String(row.value).toLowerCase() === current.toLowerCase() ? ' selected' : '';
+    return `<option value="${escapeHtml(row.value)}"${selected}>${escapeHtml(row.label)}</option>`;
+  }));
+  return `<select id="${id}">${html.join('')}</select>`;
+}
+
 function countryField(id, value) {
   const current = escapeHtml(value || '');
   return `
@@ -179,7 +253,8 @@ function phoneField(id, value) {
   const parts = splitPhone(value);
   const options = COUNTRIES.map((row) => {
     const selected = row.dial === parts.dial ? ' selected' : '';
-    return `<option value="${escapeHtml(row.dial)}"${selected}>${escapeHtml(row.name)} ${escapeHtml(row.dial)}</option>`;
+    const flag = flagEmoji(row.iso);
+    return `<option value="${escapeHtml(row.dial)}"${selected}>${flag} ${escapeHtml(row.name)} ${escapeHtml(row.dial)}</option>`;
   }).join('');
   return `
     <div class="phone-row">
@@ -189,21 +264,10 @@ function phoneField(id, value) {
   `;
 }
 
-function levelField(id, value) {
-  const current = String(value || '').trim();
-  const options = ['<option value="">Select a level</option>'].concat(
-    LANGUAGE_LEVELS.map((row) => {
-      const selected = row.value.toLowerCase() === current.toLowerCase() ? ' selected' : '';
-      return `<option value="${escapeHtml(row.value)}"${selected}>${escapeHtml(row.label)}</option>`;
-    }),
-  ).join('');
-  return `<select id="${id}">${options}</select>`;
-}
-
 function skillField(id, value) {
   return `
     <div class="skill-field">
-      <input id="${id}" type="text" value="${escapeHtml(value || '')}" placeholder="Type a skill, then pick a suggestion" autocomplete="off">
+      <input id="${id}" type="text" value="${escapeHtml(value || '')}" placeholder="Choose or type a skill" autocomplete="off">
       <div class="skill-chips" data-for="${id}"></div>
     </div>
   `;
@@ -212,7 +276,17 @@ function skillField(id, value) {
 export function enhancedControl(field, id, value) {
   if (field === 'country_of_origin' || field === 'country_of_residence') return countryField(id, value);
   if (field === 'phone_number') return phoneField(id, value);
-  if (field === 'english_level') return levelField(id, value);
+  if (field === 'english_level') return selectField(id, value, LANGUAGE_LEVELS, 'Select a level');
+  if (field === 'gender') return selectField(id, value, GENDER_OPTIONS, 'Select gender');
+  if (field === 'age') return selectField(id, value, AGE_OPTIONS, 'Select age');
+  if (field === 'preferred_contact_method') return selectField(id, value, CONTACT_METHODS, 'Select a contact method');
+  if (field === 'legal_status' || field === 'refugee_status' || field === 'work_permission') {
+    return selectField(id, value, YES_NO_OPTIONS, 'Select an option');
+  }
+  if (field === 'years_of_experience' || field === 'years_of_tech_experience') {
+    return selectField(id, value, EXPERIENCE_YEARS, 'Select years');
+  }
+  if (field === 'employment_status') return selectField(id, value, EMPLOYMENT_OPTIONS, 'Select employment status');
   if (field === 'technical_skills' || field === 'key_skills') return skillField(id, value);
   return `<input id="${id}" type="text" value="${escapeHtml(value || '')}">`;
 }
@@ -224,7 +298,10 @@ export function bindEnhancedFields(root, getJobTitle) {
     const list = input.parentElement.querySelector('.combo-list');
     const render = () => {
       const rows = filterCountries(input.value);
-      list.innerHTML = rows.map((row) => `<button type="button" data-country="${escapeHtml(row.name)}">${escapeHtml(row.name)}</button>`).join('');
+      list.innerHTML = rows.map((row) => {
+        const flag = flagEmoji(row.iso);
+        return `<button type="button" data-country="${escapeHtml(row.name)}">${flag} ${escapeHtml(row.name)}</button>`;
+      }).join('');
       list.hidden = !rows.length;
     };
     input.addEventListener('focus', render);
