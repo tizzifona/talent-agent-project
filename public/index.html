@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Talent Agent v3</title>
-    <link rel="webdaemon" href="app.yml" prefix="talent/v3">
+    <link rel="webdaemon" href="app.yml">
     <link rel="icon" type="image/png" href="images/icon-heart.png">
     <link rel="apple-touch-icon" href="images/icon-heart.png">
     <meta property="og:title" content="Talent Agent v3">
@@ -412,7 +412,6 @@
       const DAEMON_SDK = 'https://webdaemon.online/latest/static/lib/dist/index.js';
       const PAGE_SIZE = 25;
       const COLUMN_PAGE = 5;
-      const DECLARED_PREFIX = 'talent/v3';
       const TABLE_COLUMNS = [
         { id: 'name', label: 'Name' },
         { id: 'email', label: 'Email' },
@@ -1204,19 +1203,13 @@ Do not invent employment_status. refugee_status is sensitive.`;
         }
 
         async detectAgentPrefix() {
-          const link = document.querySelector('link[rel=webdaemon]');
-          const candidates = [DECLARED_PREFIX, await this.app.getDefaultPrefix()];
-          for (const prefix of candidates) {
-            link.setAttribute('prefix', prefix);
-            try {
-              await this.agentPost('/tables/list');
-              return prefix;
-            } catch (error) {
-              if (!/no source record/i.test(String(error?.message || error))) return prefix;
-            }
+          try {
+            await this.agentPost('/tables/list');
+            return true;
+          } catch (error) {
+            if (/no source record/i.test(String(error?.message || error))) return null;
+            return true;
           }
-          link.setAttribute('prefix', DECLARED_PREFIX);
-          return null;
         }
 
         async safeListTables() {
