@@ -1,7 +1,6 @@
 title: Talent Agent v3
 description: Blue Hope talent dashboard with editable tables and mailing prep
 icon: https://tizzifona.github.io/talent-agent-project/images/icon-heart.png
-prefix: talent/v3
 
 scope:
   chat:
