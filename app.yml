@@ -1,7 +1,7 @@
 title: Talent Agent
 description: Blue Hope talent dashboard with editable tables and mailing prep
 icon: https://tizzifona.github.io/talent-agent-project/images/icon-heart.png
-etag: 9
+etag: 10
 
 scope:
   chat:
@@ -16,10 +16,6 @@ scope:
     description: Can process CSV data and perform matching
   expertAsk:
     description: Can ask this agent as an MCP expert
-  read_drive:
-    description: Can read personal-link replies from drive
-  write_drive:
-    description: Can manage personal-link replies on drive
 
 grant:
   ${party}:
@@ -29,20 +25,12 @@ grant:
     - write_memory
     - process_data
     - expertAsk
-    - read_drive
-    - write_drive
 
 audience:
   ${party}:
-    ${source}: chat useTools read_memory write_memory process_data read_drive write_drive
-
-drive:
-  replies:
-    write:
-      - public
-      - ${party}
-    read:
-      - ${party}
+    ${source}: chat useTools read_memory write_memory process_data
+  public:
+    candidate: read_memory write_memory
 
 tab:
   agent:
@@ -54,6 +42,10 @@ tab:
         You are the on-screen assistant for Blue Hope Talent Agent on a working talent table.
         Help with candidate search, field meaning, review, export, and mailing prep.
         Do not call index_resolve without a search key. Do not invent employment status.
+  candidate:
+    src: agent/candidate-tab.ts
+    importmap: importmap.json
+    ttl: 300
 
 mcp:
   tab: agent

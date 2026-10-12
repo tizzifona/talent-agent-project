@@ -33,9 +33,9 @@ import {
   getTokenPayload,
   listCampaigns,
   listPendingUpdates,
+  listPersonCommunication,
   listTemplates,
   prepareCampaign,
-  importPublicReplies,
   previewRecipients,
   reviewPendingUpdate,
   deleteTemplate,
@@ -43,6 +43,7 @@ import {
   sendCampaign,
   submitTokenResponse,
 } from './mailing-store.ts';
+import { addPersonComment, listPersonComments } from './notes-store.ts';
 import { deletePeopleList, getPeopleList, listPeopleLists, renamePeopleList, savePeopleList } from './list-store.ts';
 import { getMailSettings, saveMailSettings, sendTestEmail } from './mailer.ts';
 
@@ -382,8 +383,29 @@ Deno.serve({ port: 0 }, async (request) => {
       return response({ ok: { records: await listCampaigns(body?.tableId) } });
     }
 
-    if (url.pathname.endsWith('/mailing/replies/import') && request.method === 'POST') {
-      return response({ ok: await importPublicReplies(request) });
+    if (url.pathname.endsWith('/persons/communication') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'Person id required' });
+      return response({ ok: await listPersonCommunication(String(body.id)) });
+    }
+
+    if (url.pathname.endsWith('/persons/comments/add') && request.method === 'POST') {
+      const body = await request.json();
+      return response({
+        ok: {
+          record: await addPersonComment({
+            personId: String(body?.id || body?.personId || ''),
+            text: String(body?.text || ''),
+            author: actorFrom(request),
+          }),
+        },
+      });
+    }
+
+    if (url.pathname.endsWith('/persons/comments') && request.method === 'POST') {
+      const body = await request.json();
+      if (!body?.id) return response({ error: 'Person id required' });
+      return response({ ok: { records: await listPersonComments(String(body.id)) } });
     }
 
     if (url.pathname.endsWith('/mailing/pending') && request.method === 'POST') {

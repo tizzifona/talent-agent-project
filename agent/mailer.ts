@@ -19,6 +19,7 @@ export interface OutboundMessage {
   body: string;
   html?: string;
   personId?: string;
+  digest?: string;
 }
 
 function emailCopy(text: string): string {
@@ -216,18 +217,71 @@ async function sentToday(): Promise<number> {
   }
 }
 
-async function rememberSend(id: string, email: string, subject: string, campaignId: string): Promise<void> {
+async function rememberSend(
+  id: string,
+  email: string,
+  subject: string,
+  campaignId: string,
+  personId = '',
+  digest = '',
+): Promise<void> {
   await structuredWrite(COLLECTIONS.mailSends, TYPES.mailSend, [{
     id,
     object: {
       email,
       subject,
       campaign_id: campaignId,
+      person_id: personId,
+      digest,
       status: 'sent',
       sent_on: todayStamp(),
       sent_at: new Date().toISOString(),
     },
   }]);
+}
+
+function unwrapSend(record: JsonMap): JsonMap {
+  const object = (record.object && typeof record.object === 'object')
+    ? record.object as JsonMap
+    : record;
+  return { id: record.id, ...object };
+}
+
+export async function listPersonSends(personId: string): Promise<JsonMap[]> {
+  const id = String(personId || '');
+  if (!id) return [];
+  const match = (rows: JsonMap[]) => rows.filter((row) => String(row.person_id || '') === id);
+  try {
+    const result = await structuredQuery(COLLECTIONS.mailSends, {
+      type: TYPES.mailSend,
+      filter: { person_id: id },
+      select: ['*'],
+      order: 'created-desc',
+      limit: 100,
+    });
+    const rows = match(result.records.map(unwrapSend));
+    if (rows.length) return rows;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/not found/i.test(message)) {
+      // Fall through to an unfiltered query.
+    } else {
+      return [];
+    }
+  }
+  try {
+    const result = await structuredQuery(COLLECTIONS.mailSends, {
+      type: TYPES.mailSend,
+      select: ['*'],
+      order: 'created-desc',
+      limit: 200,
+    });
+    return match(result.records.map(unwrapSend));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/not found/i.test(message)) return [];
+    throw error;
+  }
 }
 
 function relaxDenoEnv(): void {
@@ -325,7 +379,14 @@ export async function deliverMessages(input: {
     seen.add(id);
     try {
       await transmit(settings, { ...message, email });
-      await rememberSend(id, email, message.subject, input.campaignId || '');
+      await rememberSend(
+        id,
+        email,
+        message.subject,
+        input.campaignId || '',
+        String(message.personId || ''),
+        String(message.digest || ''),
+      );
       sentEmails.push(email);
       sent += 1;
       room -= 1;

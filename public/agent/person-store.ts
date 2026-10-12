@@ -264,6 +264,9 @@ function personObject(person: MatchedPerson, runId: string, stableId: string): J
     ]),
     run_id: runId,
     review_status: 'pending',
+    info_update_status: 'not_updated',
+    update_digest: '',
+    update_link_expires_at: '',
     suggested_merge_id: '',
     merged_into: '',
     merged_from: '',
@@ -783,6 +786,9 @@ export async function createPerson(input: JsonMap & { run_id: string }): Promise
     }],
     run_id: runId,
     review_status: 'confirmed',
+    info_update_status: 'not_updated',
+    update_digest: '',
+    update_link_expires_at: '',
     suggested_merge_id: '',
     merged_into: '',
     merged_from: '',
@@ -791,6 +797,53 @@ export async function createPerson(input: JsonMap & { run_id: string }): Promise
   object.search_text = rebuildSearchText({ id: stableId, ...object });
   await structuredWrite(COLLECTIONS.persons, TYPES.person, [{ id: stableId, object }]);
   return { id: stableId, ...object };
+}
+
+export async function patchPersonMeta(id: string, fields: JsonMap): Promise<JsonMap> {
+  const person = await getPerson(id);
+  if (!person) throw new Error('Person not found');
+  const next = {
+    ...asStoredObject(person),
+    ...fields,
+    updated_at: new Date().toISOString(),
+  };
+  next.search_text = rebuildSearchText({ id, ...next });
+  await structuredWrite(COLLECTIONS.persons, TYPES.person, [{ id, object: next }]);
+  return { id, ...next };
+}
+
+export async function getPersonByDigest(digest: string): Promise<JsonMap | null> {
+  const value = String(digest || '').trim();
+  if (!value) return null;
+  try {
+    const result = await structuredQuery(COLLECTIONS.persons, {
+      type: TYPES.person,
+      filter: { update_digest: value },
+      select: ['*'],
+      limit: 5,
+    });
+    const match = result.records.map(unwrapObject).find((row) => String(row.update_digest || '') === value);
+    if (match) return match;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/not found/i.test(message)) {
+      // Fall through to a wider scan when the filter is unsupported.
+    } else {
+      return null;
+    }
+  }
+  try {
+    const result = await structuredQuery(COLLECTIONS.persons, {
+      type: TYPES.person,
+      select: ['*'],
+      limit: 500,
+    });
+    return result.records.map(unwrapObject).find((row) => String(row.update_digest || '') === value) || null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/not found/i.test(message)) return null;
+    throw error;
+  }
 }
 
 export async function updatePerson(id: string, fields: JsonMap): Promise<JsonMap> {
@@ -822,6 +875,7 @@ export async function softDeletePerson(id: string, actor = 'admin', note = ''): 
     review_decided_by: actor,
     review_decided_at: new Date().toISOString(),
     review_reason: note || 'Removed from working table',
+    info_update_status: 'opted_out',
   };
   next.search_text = rebuildSearchText({ id, ...next });
   await structuredWrite(COLLECTIONS.persons, TYPES.person, [{ id, object: next }]);

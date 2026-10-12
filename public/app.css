@@ -1084,6 +1084,68 @@ body.public-candidate #candidate-fields {
   font-weight: 600;
 }
 
+.profile-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.profile-tabs .action-btn.active {
+  background: var(--teal);
+  color: var(--bg);
+  border-color: var(--teal);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-pill.pending {
+  color: #f4d27a;
+  border-color: color-mix(in srgb, #f4d27a 45%, var(--line));
+}
+
+.status-pill.updated {
+  color: var(--teal);
+  border-color: color-mix(in srgb, var(--teal) 45%, var(--line));
+}
+
+.status-pill.opted_out {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+
+.comment-item {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.comment-item p {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+}
+
+#person-comment-input {
+  width: 100%;
+  min-height: 120px;
+  margin: 8px 0 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  box-sizing: border-box;
+}
+
 .profile-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));

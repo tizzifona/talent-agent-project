@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=17">
+    <link rel="stylesheet" href="app.css?v=18">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -429,6 +429,7 @@
         { id: 'education', label: 'Education' },
         { id: 'employment', label: 'Employment' },
         { id: 'review_reason', label: 'Review reason' },
+        { id: 'info_update', label: 'Updated?' },
       ];
       const ACTION_COLUMN = { id: 'actions', label: 'Actions' };
       const EDITABLE_FIELDS = [
@@ -700,6 +701,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
             ['employment_status', 'Employment'],
             ['seniority', 'Seniority'],
             ['review_status', 'Review status'],
+            ['info_update_status', 'Updated profile'],
             ['review_reason', 'Review note'],
             ['review_decided_by', 'Decided by'],
           ])),
@@ -731,6 +733,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
           this.editingPersonId = null;
           this.selectedTemplateId = '';
           this.candidateToken = '';
+          this.viewingPersonId = '';
           this.workspacePanel = 'people';
           this.peopleColGroups = 1;
           this.reviewColGroups = 1;
@@ -740,7 +743,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
 
         async init() {
           const params = new URLSearchParams(window.location.search);
-          this.candidateToken = params.get('token') || '';
+          this.candidateToken = params.get('c') || params.get('token') || '';
           this.setupEventListeners();
           if (this.candidateToken) {
             this.openPublicCandidate();
@@ -994,6 +997,15 @@ Do not invent employment_status. refugee_status is sensitive.`;
             if (btn) this.handleReviewAction(this.mergeSourceId, 'merge', btn.dataset.targetId);
           });
           document.getElementById('report-content').addEventListener('click', (event) => {
+            const tabBtn = event.target.closest('[data-profile-tab]');
+            if (tabBtn) {
+              this.switchProfileTab(tabBtn.dataset.profileTab);
+              return;
+            }
+            if (event.target.closest('[data-comment-add]')) {
+              this.addPersonComment();
+              return;
+            }
             const actionBtn = event.target.closest('[data-review-action]');
             if (actionBtn) {
               this.handleReviewAction(
@@ -1146,7 +1158,20 @@ Do not invent employment_status. refugee_status is sensitive.`;
 
         visibleColumns() {
           const main = ['name', 'email', 'phone', 'country', 'skills'];
-          return [...TABLE_COLUMNS.filter((column) => main.includes(column.id)), ACTION_COLUMN];
+          const updateCol = TABLE_COLUMNS.find((column) => column.id === 'info_update');
+          return [
+            ...TABLE_COLUMNS.filter((column) => main.includes(column.id)),
+            updateCol,
+            ACTION_COLUMN,
+          ].filter(Boolean);
+        }
+
+        updateStatusLabel(status) {
+          const value = String(status || 'not_updated');
+          if (value === 'pending') return 'Pending';
+          if (value === 'updated') return 'Yes';
+          if (value === 'opted_out') return 'Opted out';
+          return 'No';
         }
 
         changeColumnGroups(mode, delta) {
@@ -1199,6 +1224,10 @@ Do not invent employment_status. refugee_status is sensitive.`;
               return escapeHtml(person.highest_education_level || '-');
             case 'employment':
               return escapeHtml(person.employment_status || 'unknown');
+            case 'info_update': {
+              const status = person.info_update_status || 'not_updated';
+              return `<span class="status-pill ${escapeHtml(status)}">${escapeHtml(this.updateStatusLabel(status))}</span>`;
+            }
             case 'review_reason':
               return escapeHtml(person.review_reason || (person.needs_review ? 'Needs review' : '-'));
             case 'actions':
@@ -1529,7 +1558,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
               subject: document.getElementById('mailing-subject').value,
               body: document.getElementById('mailing-body').value,
               baseUrl: window.location.href.split('?')[0],
-              inboxUrl: await this.replyInboxUrl(),
+              submitBaseUrl: await this.candidateSubmitBase(),
             });
             note.textContent = this.describeDelivery(result);
             await this.refreshMailingCount();
@@ -1653,6 +1682,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
               alert('Person not found');
               return;
             }
+            this.viewingPersonId = person.id;
             const displayName = person.full_name
               || [person.first_name, person.last_names].filter(Boolean).join(' ')
               || 'Person';
@@ -1663,7 +1693,20 @@ Do not invent employment_status. refugee_status is sensitive.`;
                 <button class="action-btn danger" data-person-action="delete" data-person-id="${escapeHtml(person.id)}">Delete</button>
                 ${person.needs_review ? this.reviewActions(person) : ''}
               </div>
-              ${renderPersonProfile(person)}
+              <div class="profile-tabs">
+                <button type="button" class="action-btn active" data-profile-tab="profile">Profile</button>
+                <button type="button" class="action-btn" data-profile-tab="communication">Communication</button>
+                <button type="button" class="action-btn" data-profile-tab="comments">Comments</button>
+              </div>
+              <div class="profile-pane" data-profile-pane="profile">
+                ${renderPersonProfile(person)}
+              </div>
+              <div class="profile-pane" data-profile-pane="communication" hidden>
+                <p class="upload-hint">Loading messages...</p>
+              </div>
+              <div class="profile-pane" data-profile-pane="comments" hidden>
+                <p class="upload-hint">Loading comments...</p>
+              </div>
             `;
             document.getElementById('report-modal').classList.add('active');
           } catch (error) {
@@ -1671,7 +1714,104 @@ Do not invent employment_status. refugee_status is sensitive.`;
           }
         }
 
+        switchProfileTab(tab) {
+          document.querySelectorAll('#report-content [data-profile-tab]').forEach((button) => {
+            button.classList.toggle('active', button.dataset.profileTab === tab);
+          });
+          document.querySelectorAll('#report-content [data-profile-pane]').forEach((pane) => {
+            pane.hidden = pane.dataset.profilePane !== tab;
+          });
+          if (tab === 'communication') this.loadPersonCommunication();
+          if (tab === 'comments') this.loadPersonComments();
+        }
+
+        async loadPersonCommunication() {
+          const pane = document.querySelector('#report-content [data-profile-pane="communication"]');
+          if (!pane || !this.viewingPersonId) return;
+          try {
+            const result = await this.agentPost('/persons/communication', { id: this.viewingPersonId });
+            const sends = result.sends || [];
+            const tokens = result.tokens || [];
+            const status = this.updateStatusLabel(result.info_update_status);
+            const replyText = (row) => {
+              const pending = (result.pending || []).find((item) => item.status === 'pending');
+              if (pending) return 'Pending reply';
+              return status;
+            };
+            const rows = sends.length
+              ? sends.map((item) => `
+                  <tr>
+                    <td>${escapeHtml(item.sent_at ? new Date(item.sent_at).toLocaleString() : '-')}</td>
+                    <td>${escapeHtml(item.subject || '-')}</td>
+                    <td>${escapeHtml(item.campaign_id || '-')}</td>
+                    <td>Sent</td>
+                    <td>${escapeHtml(replyText(item))}</td>
+                  </tr>
+                `).join('')
+              : '';
+            const prepared = tokens.filter((item) => !sends.some((send) => send.campaign_id && send.campaign_id === item.campaign_id));
+            const extra = prepared.map((item) => `
+              <tr>
+                <td>${escapeHtml(item.created_at ? new Date(item.created_at).toLocaleString() : '-')}</td>
+                <td>Personal update link</td>
+                <td>${escapeHtml(item.campaign_id || '-')}</td>
+                <td>Prepared</td>
+                <td>${escapeHtml(replyText(item))}</td>
+              </tr>
+            `).join('');
+            pane.innerHTML = `
+              <p class="upload-hint">Profile update status: <strong>${escapeHtml(status)}</strong></p>
+              <table class="pending-diff">
+                <thead><tr><th>Date</th><th>Subject</th><th>Campaign</th><th>Sent</th><th>Reply</th></tr></thead>
+                <tbody>${rows || extra ? `${rows}${extra}` : '<tr><td colspan="5">No mailings yet.</td></tr>'}</tbody>
+              </table>
+            `;
+          } catch (error) {
+            pane.innerHTML = `<p class="upload-hint">${escapeHtml(error.message)}</p>`;
+          }
+        }
+
+        async loadPersonComments() {
+          const pane = document.querySelector('#report-content [data-profile-pane="comments"]');
+          if (!pane || !this.viewingPersonId) return;
+          try {
+            const result = await this.agentPost('/persons/comments', { id: this.viewingPersonId });
+            const records = result.records || [];
+            const items = records.length
+              ? records.map((item) => `
+                  <div class="comment-item">
+                    <div class="upload-hint">${escapeHtml(item.author || 'team')} · ${escapeHtml(item.created_at ? new Date(item.created_at).toLocaleString() : '')}</div>
+                    <p>${escapeHtml(item.text || '')}</p>
+                  </div>
+                `).join('')
+              : '<p class="upload-hint">No internal comments yet.</p>';
+            pane.innerHTML = `
+              <div id="person-comments-list">${items}</div>
+              <label for="person-comment-input">Add a comment</label>
+              <textarea id="person-comment-input" placeholder="Visible only to the Blue Hope team"></textarea>
+              <div class="btn-row">
+                <button type="button" class="primary-btn" data-comment-add>Save comment</button>
+              </div>
+            `;
+          } catch (error) {
+            pane.innerHTML = `<p class="upload-hint">${escapeHtml(error.message)}</p>`;
+          }
+        }
+
+        async addPersonComment() {
+          const input = document.getElementById('person-comment-input');
+          const text = String(input?.value || '').trim();
+          if (!text || !this.viewingPersonId) return;
+          try {
+            await this.agentPost('/persons/comments/add', { id: this.viewingPersonId, text });
+            await this.loadPersonComments();
+          } catch (error) {
+            this.showError(`Comment failed: ${error.message}`);
+          }
+        }
+
         closeModal() {
+          this.viewingPersonId = '';
           document.getElementById('report-modal').classList.remove('active');
         }
 
@@ -1698,11 +1838,16 @@ Do not invent employment_status. refugee_status is sensitive.`;
           return fields;
         }
 
-        async replyInboxUrl() {
-          if (!this.app) return '';
-          const prefix = (await this.app.getPrefix?.()) || (await this.app.getDefaultPrefix?.()) || '';
-          if (!prefix) return '';
-          return `${this.app.getPartyOrigin()}/drive/${prefix}/replies`;
+        async candidateSubmitBase() {
+          try {
+            const url = await this.app.getAgentUrl('candidate');
+            return String(url || '').replace(/\/$/, '');
+          } catch {
+            if (!this.app) return '';
+            const prefix = (await this.app.getPrefix?.()) || (await this.app.getDefaultPrefix?.()) || '';
+            if (!prefix) return '';
+            return `${this.app.getPartyOrigin()}/tab/${prefix}/candidate`;
+          }
         }
 
         async openPersonEditor(personId) {
@@ -2307,7 +2452,6 @@ Do not invent employment_status. refugee_status is sensitive.`;
           await this.loadCampaigns();
           await this.loadTemplates();
           await this.loadMailSettings();
-          await this.importPublicReplies();
           await this.loadPendingUpdates('mailing-pending');
           await this.loadSavedLists();
           if (this.pendingSegment) {
@@ -2461,7 +2605,7 @@ Do not invent employment_status. refugee_status is sensitive.`;
                 ? new Date(document.getElementById('mailing-schedule').value).toISOString()
                 : new Date().toISOString(),
               baseUrl: window.location.href.split('?')[0],
-              inboxUrl: await this.replyInboxUrl(),
+              submitBaseUrl: await this.candidateSubmitBase(),
             });
             document.getElementById('mailing-prepare-note').textContent =
               `Prepared ${result.recipientCount || 0} messages. Links expire ${result.expiresAt ? new Date(result.expiresAt).toLocaleString() : 'in 3 days'}. Use Send next batch to deliver them.`;
@@ -2513,7 +2657,6 @@ Do not invent employment_status. refugee_status is sensitive.`;
           const el = document.getElementById(targetId);
           if (!el) return;
           try {
-            await this.agentPost('/mailing/replies/import', {}).catch(() => null);
             const result = await this.agentPost('/mailing/pending', { status: 'pending' });
             const records = result.records || [];
             this.pendingById = Object.fromEntries(records.map((item) => [item.id, item]));
@@ -2619,6 +2762,30 @@ Do not invent employment_status. refugee_status is sensitive.`;
             document.getElementById('candidate-submit-btn').style.display = '';
           }
           actions.style.display = 'flex';
+          this.refreshPublicCandidate();
+        }
+
+        async refreshPublicCandidate() {
+          const submit = this.candidateSubmitUrl();
+          if (!submit) return;
+          try {
+            const response = await fetch(submit, { method: 'GET' });
+            const result = await response.json().catch(() => ({}));
+            const data = result.ok || result;
+            if (!response.ok || result.error || data.valid === false) {
+              const status = document.getElementById('candidate-status');
+              status.textContent = result.error || data.error || 'This link is no longer available.';
+              document.getElementById('candidate-actions').style.display = 'none';
+              document.getElementById('candidate-fields').innerHTML = '';
+              return;
+            }
+            const optOut = new URLSearchParams(window.location.search).get('intent') === 'opt_out';
+            if (!optOut && data.fields) {
+              this.renderFieldInputs('candidate-fields', data.fields, 'cand', true);
+            }
+          } catch {
+            // Keep the snapshot from the personal link if the live lookup is unavailable.
+          }
         }
 
         readLinkPayload() {
@@ -2634,68 +2801,38 @@ Do not invent employment_status. refugee_status is sensitive.`;
           }
         }
 
-        async submitPublicReply(action) {
+        candidateSubmitUrl() {
           const payload = this.readLinkPayload();
-          const inbox = String(payload.inbox || '').replace(/\/$/, '');
-          if (!inbox) {
+          const submit = String(payload.submit || '').replace(/\/$/, '');
+          if (submit) return submit;
+          if (!this.candidateToken) return '';
+          return '';
+        }
+
+        async submitPublicReply(action) {
+          const submit = this.candidateSubmitUrl();
+          if (!submit) {
             throw new Error('This link cannot deliver a reply. Ask Blue Hope to send a new personal link.');
           }
-          const response = await fetch(`${inbox}/${encodeURIComponent(this.candidateToken)}.json`, {
-            method: 'PUT',
+          const response = await fetch(submit, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              token: this.candidateToken,
+              digest: this.candidateToken,
               action,
               fields: action === 'update' ? this.readFieldInputs('cand') : {},
               created_at: new Date().toISOString(),
             }),
           });
-          if (!response.ok) {
-            const text = await response.text();
-            throw new Error(text || 'Could not save your reply.');
-          }
-        }
-
-        async importPublicReplies() {
-          try {
-            const result = await this.agentPost('/mailing/replies/import', {});
-            if (result?.note) {
-              const status = document.getElementById('smtp-status');
-              if (status && !/Sending from/.test(status.textContent)) status.textContent = result.note;
-            }
-          } catch (error) {
-            console.error('Reply import failed:', error);
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || result.error) {
+            throw new Error(result.error || 'Could not save your reply.');
           }
         }
 
         async loadCandidatePortal() {
           if (!this.candidateToken) return;
-          const status = document.getElementById('candidate-status');
-          const actions = document.getElementById('candidate-actions');
-          try {
-            const result = await this.agentPost('/candidate/token', { token: this.candidateToken });
-            if (!result.valid) {
-              status.textContent = result.error || 'This link is no longer available.';
-              actions.style.display = 'none';
-              document.getElementById('candidate-fields').innerHTML = '';
-              return;
-            }
-            const optOut = new URLSearchParams(window.location.search).get('intent') === 'opt_out';
-            status.textContent = optOut
-              ? 'You can stop cooperation with Blue Hope. This link stays open for 3 days.'
-              : `Link valid until ${result.token?.expires_at ? new Date(result.token.expires_at).toLocaleString() : '3 days from issue'}.`;
-            if (optOut) {
-              document.getElementById('candidate-fields').innerHTML = '';
-              document.getElementById('candidate-submit-btn').style.display = 'none';
-            } else {
-              this.renderFieldInputs('candidate-fields', result.person || {}, 'cand', true);
-              document.getElementById('candidate-submit-btn').style.display = '';
-            }
-            actions.style.display = 'flex';
-          } catch (error) {
-            status.textContent = error.message;
-            actions.style.display = 'none';
-          }
+          await this.refreshPublicCandidate();
         }
 
         async submitCandidate(action) {
