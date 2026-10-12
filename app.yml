@@ -1,7 +1,7 @@
 title: Talent Agent
 description: Blue Hope talent dashboard with editable tables and mailing prep
 icon: https://tizzifona.github.io/talent-agent-project/images/icon-heart.png
-etag: 10
+etag: 11
 
 scope:
   chat:
@@ -45,7 +45,7 @@ tab:
   candidate:
     src: agent/candidate-tab.ts
     importmap: importmap.json
-    ttl: 300
+    ttl: 3600
 
 mcp:
   tab: agent
