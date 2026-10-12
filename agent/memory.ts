@@ -15,6 +15,7 @@ export const COLLECTIONS = {
   peopleLists: 'bh-talent-people-lists',
   mailSettings: 'bh-talent-mail-settings',
   mailSends: 'bh-talent-mail-sends',
+  personComments: 'bh-talent-person-comments',
 } as const;
 
 export const TYPES = {
@@ -31,6 +32,7 @@ export const TYPES = {
   peopleList: 'people-list',
   mailSettings: 'mail-settings',
   mailSend: 'mail-send',
+  personComment: 'person-comment',
 } as const;
 
 export const LATEST_RUN_ID = 'latest';

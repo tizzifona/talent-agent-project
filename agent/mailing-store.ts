@@ -8,14 +8,15 @@ import {
 import {
   exportPersonRows,
   getPerson,
+  getPersonByDigest,
+  patchPersonMeta,
   softDeletePerson,
   updatePerson,
   type JsonMap,
 } from './person-store.ts';
 import { getPeopleList } from './list-store.ts';
-import { brandedEmail, deliverMessages, sentFlags } from './mailer.ts';
+import { brandedEmail, deliverMessages, listPersonSends, sentFlags } from './mailer.ts';
 import { Lifecycle } from '$static/lib/ts/Lifecycle.ts';
-import { Token } from '$static/lib/js/Token.js';
 
 const TOKEN_TTL_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -128,21 +129,23 @@ function encodePayload(data: JsonMap): string {
 
 export function publicCandidateLink(
   base: string,
-  token: string,
+  digest: string,
   snapshot: JsonMap,
   expiresAt: string,
-  inboxUrl = '',
+  submitUrl = '',
 ): string {
   const fields: JsonMap = {};
   for (const field of EDITABLE_PERSON_FIELDS) fields[field] = snapshot[field] ?? '';
-  const payload = encodePayload({ exp: expiresAt, fields, inbox: inboxUrl });
-  return `${base}?token=${token}#d=${payload}`;
+  const payload = encodePayload({ exp: expiresAt, fields, submit: submitUrl });
+  return `${base}?c=${digest}#d=${payload}`;
 }
 
-export function replyInboxUrl(): string {
+export function candidateSubmitUrl(digest: string, submitBase = ''): string {
+  const trimmed = String(submitBase || '').replace(/\/$/, '');
+  if (trimmed) return `${trimmed}/${encodeURIComponent(digest)}`;
   try {
     const { system } = Lifecycle.getConfig();
-    return `${system.protocol}//${system.party}/drive/${system.sourcePrefix}/replies`;
+    return `${system.protocol}//${system.party}/tab/${system.sourcePrefix}/candidate/${encodeURIComponent(digest)}`;
   } catch {
     return '';
   }
@@ -156,10 +159,23 @@ function withOptOut(updateLink: string): string {
   return `${before}${joiner}intent=opt_out${hash}`;
 }
 
-function randomToken(): string {
-  const bytes = new Uint8Array(18);
+function randomDigest(): string {
+  const bytes = new Uint8Array(12);
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function ensurePersonDigest(person: JsonMap, expiresAt: string): Promise<string> {
+  const existing = String(person.update_digest || '').trim();
+  const digest = existing || randomDigest();
+  await patchPersonMeta(String(person.id), {
+    update_digest: digest,
+    update_link_expires_at: expiresAt,
+    info_update_status: String(person.info_update_status || 'not_updated'),
+  });
+  person.update_digest = digest;
+  person.update_link_expires_at = expiresAt;
+  return digest;
 }
 
 function personSnapshot(person: JsonMap): JsonMap {
@@ -182,7 +198,7 @@ function renderTemplate(text: string, person: JsonMap, updateLink: string): stri
     job_title: String(person.job_title || ''),
     technical_skills: String(person.technical_skills || ''),
     update_link: updateLink,
-    opt_out_link: updateLink.includes('token=') ? withOptOut(updateLink) : updateLink,
+    opt_out_link: withOptOut(updateLink),
   };
   return text.replace(/\{\{(\w+)\}\}/g, (_, key: string) => values[key] ?? '');
 }
@@ -314,7 +330,7 @@ export async function prepareCampaign(input: {
   frequency: string;
   scheduleAt: string;
   baseUrl: string;
-  inboxUrl?: string;
+  submitBaseUrl?: string;
 }): Promise<JsonMap> {
   const recipients = await selectRecipients(input.runId, input.segment);
 
@@ -322,19 +338,20 @@ export async function prepareCampaign(input: {
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
   const base = String(input.baseUrl || '').replace(/[?#].*$/, '').replace(/\/$/, '');
-  const inbox = String(input.inboxUrl || replyInboxUrl());
 
   const messages: JsonMap[] = [];
   const tokenRecords: Array<{ id: string; object: JsonMap }> = [];
 
   for (const person of recipients) {
-    const token = randomToken();
+    const digest = await ensurePersonDigest(person, expiresAt);
     const snapshot = personSnapshot(person);
-    const updateLink = publicCandidateLink(base, token, snapshot, expiresAt, inbox);
+    const submitUrl = candidateSubmitUrl(digest, input.submitBaseUrl);
+    const updateLink = publicCandidateLink(base, digest, snapshot, expiresAt, submitUrl);
     tokenRecords.push({
-      id: token,
+      id: digest,
       object: {
-        token,
+        token: digest,
+        digest,
         campaign_id: campaignId,
         person_id: person.id,
         run_id: input.runId,
@@ -395,28 +412,29 @@ export async function sendCampaign(input: {
   subject: string;
   body: string;
   baseUrl: string;
-  inboxUrl?: string;
+  submitBaseUrl?: string;
 }): Promise<JsonMap> {
   const recipients = await selectRecipients(input.runId, input.segment);
   const campaignId = `camp-${Date.now()}`;
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS).toISOString();
   const base = String(input.baseUrl || '').replace(/[?#].*$/, '').replace(/\/$/, '');
-  const inbox = String(input.inboxUrl || replyInboxUrl());
-  const messages: Array<{ email: string; subject: string; body: string; html?: string; personId: string }> = [];
+  const messages: Array<{ email: string; subject: string; body: string; html?: string; personId: string; digest: string }> = [];
   const tokenRecords: Array<{ id: string; object: JsonMap }> = [];
 
   for (const person of recipients) {
-    const token = randomToken();
+    const digest = await ensurePersonDigest(person, expiresAt);
     const snapshot = personSnapshot(person);
-    const updateLink = publicCandidateLink(base, token, snapshot, expiresAt, inbox);
+    const submitUrl = candidateSubmitUrl(digest, input.submitBaseUrl);
+    const updateLink = publicCandidateLink(base, digest, snapshot, expiresAt, submitUrl);
     const optOutLink = withOptOut(updateLink);
     const email = String(person.primary_email || '').trim();
     const text = renderTemplate(input.body, person, updateLink);
     tokenRecords.push({
-      id: token,
+      id: digest,
       object: {
-        token,
+        token: digest,
+        digest,
         campaign_id: campaignId,
         person_id: person.id,
         run_id: input.runId,
@@ -431,6 +449,7 @@ export async function sendCampaign(input: {
     });
     messages.push({
       personId: String(person.id || ''),
+      digest,
       email,
       subject: renderTemplate(input.subject, person, updateLink),
       body: text,
@@ -494,41 +513,65 @@ export async function listCampaigns(tableId?: string): Promise<JsonMap[]> {
   }
 }
 
-function tokenExpired(token: JsonMap): boolean {
-  const expires = Date.parse(String(token.expires_at || ''));
+function linkExpired(expiresAt: unknown): boolean {
+  const expires = Date.parse(String(expiresAt || ''));
   if (!Number.isFinite(expires)) return true;
   return Date.now() > expires;
 }
 
-export async function getTokenPayload(token: string): Promise<JsonMap> {
-  const record = await structuredGet(COLLECTIONS.mailingTokens, token);
-  if (!record) return { valid: false, error: 'Link not found' };
-  const data = unwrap(record);
-  if (data.status === 'revoked') {
-    return { valid: false, error: 'This link was revoked', token: data };
+export async function getDigestPayload(digest: string): Promise<JsonMap> {
+  const value = String(digest || '').trim();
+  if (!value) return { valid: false, error: 'Link not found' };
+  const person = await getPersonByDigest(value);
+  const tokenRecord = await structuredGet(COLLECTIONS.mailingTokens, value);
+  const token = tokenRecord ? unwrap(tokenRecord) : null;
+  if (token?.status === 'revoked') {
+    return { valid: false, error: 'This link was revoked', token };
   }
-  if (tokenExpired(data)) {
-    return { valid: false, error: 'This link expired after 3 days', token: data };
+  if (!person && !token) return { valid: false, error: 'Link not found' };
+  const expiresAt = person?.update_link_expires_at || token?.expires_at;
+  if (linkExpired(expiresAt)) {
+    return { valid: false, error: 'This link expired after 3 days', token, person };
   }
+  const snapshot = personSnapshot(person || (token?.snapshot as JsonMap) || {});
   return {
     valid: true,
-    token: data,
+    digest: value,
+    token,
+    person,
     fields: EDITABLE_PERSON_FIELDS,
-    person: data.snapshot || {},
+    snapshot,
+    expires_at: expiresAt,
   };
 }
 
-export async function submitTokenResponse(input: {
-  token: string;
+export async function getTokenPayload(token: string): Promise<JsonMap> {
+  const result = await getDigestPayload(token);
+  if (!result.valid) return result;
+  return {
+    ...result,
+    person: result.snapshot || result.person || {},
+  };
+}
+
+export async function submitDigestResponse(input: {
+  digest: string;
   action: 'update' | 'opt_out';
   fields?: JsonMap;
 }): Promise<JsonMap> {
-  const check = await getTokenPayload(input.token);
+  const check = await getDigestPayload(input.digest);
   if (!check.valid) return check;
 
-  const tokenData = check.token as JsonMap;
+  const person = (check.person as JsonMap) || {};
+  const tokenData = (check.token as JsonMap) || {};
+  const personId = String(person.id || tokenData.person_id || '');
+  if (!personId) return { valid: false, error: 'Candidate not found' };
+
   const now = new Date().toISOString();
-  const pendingId = `pend-${Date.now()}-${String(tokenData.person_id || '').slice(0, 40)}`.slice(0, 180);
+  const pendingId = `pend-${input.digest}`.slice(0, 180);
+  const existing = await structuredGet(COLLECTIONS.pendingUpdates, pendingId);
+  const previous = existing ? unwrap(existing) : {};
+  const snapshot = check.snapshot || personSnapshot(person);
 
   const proposed: JsonMap = {};
   if (input.action === 'update') {
@@ -539,36 +582,51 @@ export async function submitTokenResponse(input: {
     }
   }
 
+  const payload = {
+    digest: input.digest,
+    action: input.action,
+    fields: proposed,
+    created_at: now,
+  };
+
   await structuredWrite(COLLECTIONS.pendingUpdates, TYPES.pendingUpdate, [{
     id: pendingId,
     object: {
-      token: input.token,
-      campaign_id: tokenData.campaign_id,
-      person_id: tokenData.person_id,
-      run_id: tokenData.run_id,
-      table_id: tokenData.table_id,
+      token: input.digest,
+      digest: input.digest,
+      campaign_id: tokenData.campaign_id || previous.campaign_id || '',
+      person_id: personId,
+      run_id: tokenData.run_id || person.run_id || previous.run_id || '',
+      table_id: tokenData.table_id || previous.table_id || '',
       action: input.action,
       proposed_fields: proposed,
-      previous_snapshot: tokenData.snapshot || {},
+      previous_snapshot: snapshot,
+      payload,
+      version: Number(previous.version || 0) + 1,
       status: 'pending',
-      created_at: now,
+      created_at: previous.created_at || now,
+      updated_at: now,
       reviewed_at: '',
       reviewed_by: '',
     },
   }]);
 
-  await structuredWrite(COLLECTIONS.mailingTokens, TYPES.mailingToken, [{
-    id: input.token,
-    object: {
-      ...Object.fromEntries(
-        Object.entries(tokenData).filter(([key]) => key !== 'id'),
-      ),
-      status: input.action === 'opt_out' ? 'revoked' : 'active',
-      used_at: now,
-      reply_count: Number(tokenData.reply_count || 0) + 1,
-      pending_id: pendingId,
-    },
-  }]);
+  if (tokenData.token || tokenData.digest) {
+    await structuredWrite(COLLECTIONS.mailingTokens, TYPES.mailingToken, [{
+      id: input.digest,
+      object: {
+        ...Object.fromEntries(Object.entries(tokenData).filter(([key]) => key !== 'id')),
+        status: 'active',
+        used_at: now,
+        reply_count: Number(tokenData.reply_count || 0) + 1,
+        pending_id: pendingId,
+      },
+    }]);
+  }
+
+  await patchPersonMeta(personId, {
+    info_update_status: 'pending',
+  });
 
   return {
     ok: true,
@@ -577,6 +635,18 @@ export async function submitTokenResponse(input: {
       ? 'Thank you for your reply!'
       : 'Thank you! We look forward to working together.',
   };
+}
+
+export async function submitTokenResponse(input: {
+  token: string;
+  action: 'update' | 'opt_out';
+  fields?: JsonMap;
+}): Promise<JsonMap> {
+  return submitDigestResponse({
+    digest: input.token,
+    action: input.action,
+    fields: input.fields,
+  });
 }
 
 export async function listPendingUpdates(filter: {
@@ -624,7 +694,10 @@ export async function reviewPendingUpdate(
       personResult = await softDeletePerson(String(pending.person_id), actor, 'Candidate opted out via mailing link');
     } else {
       personResult = await updatePerson(String(pending.person_id), pending.proposed_fields as JsonMap || {});
+      personResult = await patchPersonMeta(String(pending.person_id), { info_update_status: 'updated' });
     }
+  } else {
+    await patchPersonMeta(String(pending.person_id), { info_update_status: 'not_updated' }).catch(() => null);
   }
 
   const next = {
@@ -637,94 +710,32 @@ export async function reviewPendingUpdate(
   return { pending: { id, ...next }, person: personResult };
 }
 
-function authHeaders(request?: Request): Record<string, string> {
-  const token = request ? Token.from(request) : null;
-  if (!token) return {};
-  try {
-    return { 'X-Tabserver-Token': token.asSignedBase64() };
-  } catch {
-    return {};
-  }
-}
-
-async function listMailingTokens(): Promise<JsonMap[]> {
+export async function listPersonCommunication(personId: string): Promise<JsonMap> {
+  const person = await getPerson(personId);
+  if (!person) throw new Error('Person not found');
+  const sends = await listPersonSends(personId);
+  const pending = (await listPendingUpdates()).filter((row) => String(row.person_id) === String(personId));
+  let tokens: JsonMap[] = [];
   try {
     const result = await structuredQuery(COLLECTIONS.mailingTokens, {
       type: TYPES.mailingToken,
+      filter: { person_id: personId },
       select: ['*'],
       order: 'created-desc',
-      limit: 200,
+      limit: 50,
     });
-    return result.records.map(unwrap);
+    tokens = result.records.map(unwrap).filter((row) => String(row.person_id || '') === String(personId));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (/not found/i.test(message)) return [];
-    throw error;
+    if (!/not found/i.test(message)) throw error;
   }
-}
-
-function fileName(path: string): string {
-  return String(path || '').split('/').pop() || '';
-}
-
-function replyRows(data: unknown): unknown[] {
-  if (Array.isArray(data)) return data;
-  if (!data || typeof data !== 'object') return [];
-  const row = data as Record<string, unknown>;
-  if (Array.isArray(row.ok)) return row.ok;
-  if (row.ok && typeof row.ok === 'object') return replyRows(row.ok);
-  return (row.records as unknown[]) || (row.files as unknown[]) || (row.items as unknown[]) || [];
-}
-
-async function listReplyFiles(inbox: string, headers: Record<string, string>): Promise<string[]> {
-  const urls = [`${inbox}/`, inbox];
-  for (const url of urls) {
-    const res = await fetch(url, { headers });
-    if (!res.ok) continue;
-    const text = await res.text();
-    try {
-      const names = replyRows(JSON.parse(text))
-        .map((row) => fileName(String((row as { name?: string; path?: string })?.name || (row as { path?: string })?.path || row)))
-        .filter((name) => name.endsWith('.json'));
-      if (names.length) return names;
-    } catch {
-      const names = [...text.matchAll(/[\w.-]+\.json/g)].map((match) => match[0]);
-      if (names.length) return names;
-    }
-  }
-  return [];
-}
-
-export async function importPublicReplies(request?: Request): Promise<JsonMap> {
-  const inbox = replyInboxUrl();
-  if (!inbox) return { imported: 0, skipped: 0 };
-  const headers = authHeaders(request);
-  const tokens = await listMailingTokens();
-  const names = new Set(await listReplyFiles(inbox, headers));
-  for (const row of tokens) {
-    const id = String(row.id || row.token || '');
-    if (id) names.add(`${id}.json`);
-  }
-  let imported = 0;
-  let skipped = 0;
-  for (const name of names) {
-    const res = await fetch(`${inbox}/${encodeURIComponent(name)}`, { headers });
-    if (!res.ok) continue;
-    const body = await res.json().catch(() => ({})) as JsonMap;
-    const token = String(body.token || name.replace(/\.json$/i, '').replace(/-\d+$/, ''));
-    if (!token) continue;
-    const action = body.action === 'opt_out' ? 'opt_out' : 'update';
-    const result = await submitTokenResponse({
-      token,
-      action,
-      fields: (body.fields as JsonMap) || {},
-    });
-    if (!result.ok) {
-      skipped += 1;
-      continue;
-    }
-    imported += 1;
-    await fetch(`${inbox}/${encodeURIComponent(name)}`, { method: 'DELETE', headers }).catch(() => null);
-  }
-  return { imported, skipped };
+  return {
+    person_id: personId,
+    info_update_status: person.info_update_status || 'not_updated',
+    digest: person.update_digest || '',
+    expires_at: person.update_link_expires_at || '',
+    sends,
+    tokens,
+    pending,
+  };
 }
