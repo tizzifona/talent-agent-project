@@ -2746,36 +2746,6 @@ Do not invent employment_status. refugee_status is sensitive.`;
             document.getElementById('candidate-submit-btn').style.display = '';
           }
           actions.style.display = 'flex';
-          this.refreshPublicCandidate();
-        }
-
-        async refreshPublicCandidate() {
-          const submit = this.candidateSubmitUrl();
-          if (!submit) return;
-          for (let attempt = 0; attempt < 6; attempt += 1) {
-            try {
-              const response = await fetch(submit, { method: 'GET' });
-              const result = await response.json().catch(() => ({}));
-              const data = result.ok || result;
-              const err = String(result.error || data.error || '');
-              if (/DaemonConfig not ready/i.test(err) && attempt < 5) {
-                await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
-                continue;
-              }
-              if (data.fields && (response.ok || data.valid)) {
-                const optOut = new URLSearchParams(window.location.search).get('intent') === 'opt_out';
-                if (!optOut) this.renderFieldInputs('candidate-fields', data.fields, 'cand', true);
-                return;
-              }
-              if (/expired|not found|revoked/i.test(err) && !document.querySelector('#candidate-fields .setting-item')) {
-                document.getElementById('candidate-status').textContent = err;
-                document.getElementById('candidate-actions').style.display = 'none';
-              }
-              return;
-            } catch {
-              if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
-            }
-          }
         }
 
         readLinkPayload() {
@@ -2799,13 +2769,31 @@ Do not invent employment_status. refugee_status is sensitive.`;
           return '';
         }
 
+        tabErrorText(result) {
+          const err = result?.error;
+          if (!err) return '';
+          if (typeof err === 'string') return err;
+          if (typeof err.message === 'string') return err.message;
+          try {
+            return JSON.stringify(err);
+          } catch {
+            return String(err);
+          }
+        }
+
+        isRetryableTabError(err) {
+          return /DaemonConfig not ready|STOPPING|Forwarder start|not ready|try again|retry/i.test(String(err || ''));
+        }
+
         async submitPublicReply(action) {
           const submit = this.candidateSubmitUrl();
           if (!submit) {
             throw new Error('This link cannot deliver a reply. Ask Blue Hope to send a new personal link.');
           }
+          const status = document.getElementById('candidate-status');
           let lastError = 'Could not save your reply.';
-          for (let attempt = 0; attempt < 6; attempt += 1) {
+          for (let attempt = 0; attempt < 8; attempt += 1) {
+            if (attempt) status.textContent = 'Saving, please wait… the secure inbox is starting.';
             const response = await fetch(submit, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -2817,11 +2805,11 @@ Do not invent employment_status. refugee_status is sensitive.`;
               }),
             });
             const result = await response.json().catch(() => ({}));
-            const err = String(result.error || '');
+            const err = this.tabErrorText(result);
             if (response.ok && !err) return;
             lastError = err || lastError;
-            if (/DaemonConfig not ready/i.test(err) && attempt < 5) {
-              await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+            if (this.isRetryableTabError(err) && attempt < 7) {
+              await new Promise((resolve) => setTimeout(resolve, Math.min(20000, 2000 * (attempt + 1))));
               continue;
             }
             throw new Error(lastError);
@@ -2831,7 +2819,6 @@ Do not invent employment_status. refugee_status is sensitive.`;
 
         async loadCandidatePortal() {
           if (!this.candidateToken) return;
-          await this.refreshPublicCandidate();
         }
 
         async submitCandidate(action) {

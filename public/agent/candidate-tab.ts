@@ -17,7 +17,7 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-async function waitForConfig(timeoutMs = 10000): Promise<void> {
+async function waitForConfig(timeoutMs = 20000): Promise<void> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     try {
