@@ -2752,23 +2752,29 @@ Do not invent employment_status. refugee_status is sensitive.`;
         async refreshPublicCandidate() {
           const submit = this.candidateSubmitUrl();
           if (!submit) return;
-          try {
-            const response = await fetch(submit, { method: 'GET' });
-            const result = await response.json().catch(() => ({}));
-            const data = result.ok || result;
-            if (!response.ok || result.error || data.valid === false) {
-              const status = document.getElementById('candidate-status');
-              status.textContent = result.error || data.error || 'This link is no longer available.';
-              document.getElementById('candidate-actions').style.display = 'none';
-              document.getElementById('candidate-fields').innerHTML = '';
+          for (let attempt = 0; attempt < 6; attempt += 1) {
+            try {
+              const response = await fetch(submit, { method: 'GET' });
+              const result = await response.json().catch(() => ({}));
+              const data = result.ok || result;
+              const err = String(result.error || data.error || '');
+              if (/DaemonConfig not ready/i.test(err) && attempt < 5) {
+                await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+                continue;
+              }
+              if (data.fields && (response.ok || data.valid)) {
+                const optOut = new URLSearchParams(window.location.search).get('intent') === 'opt_out';
+                if (!optOut) this.renderFieldInputs('candidate-fields', data.fields, 'cand', true);
+                return;
+              }
+              if (/expired|not found|revoked/i.test(err) && !document.querySelector('#candidate-fields .setting-item')) {
+                document.getElementById('candidate-status').textContent = err;
+                document.getElementById('candidate-actions').style.display = 'none';
+              }
               return;
+            } catch {
+              if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
             }
-            const optOut = new URLSearchParams(window.location.search).get('intent') === 'opt_out';
-            if (!optOut && data.fields) {
-              this.renderFieldInputs('candidate-fields', data.fields, 'cand', true);
-            }
-          } catch {
-            // Keep the snapshot from the personal link if the live lookup is unavailable.
           }
         }
 
@@ -2798,20 +2804,29 @@ Do not invent employment_status. refugee_status is sensitive.`;
           if (!submit) {
             throw new Error('This link cannot deliver a reply. Ask Blue Hope to send a new personal link.');
           }
-          const response = await fetch(submit, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              digest: this.candidateToken,
-              action,
-              fields: action === 'update' ? this.readFieldInputs('cand') : {},
-              created_at: new Date().toISOString(),
-            }),
-          });
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok || result.error) {
-            throw new Error(result.error || 'Could not save your reply.');
+          let lastError = 'Could not save your reply.';
+          for (let attempt = 0; attempt < 6; attempt += 1) {
+            const response = await fetch(submit, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                digest: this.candidateToken,
+                action,
+                fields: action === 'update' ? this.readFieldInputs('cand') : {},
+                created_at: new Date().toISOString(),
+              }),
+            });
+            const result = await response.json().catch(() => ({}));
+            const err = String(result.error || '');
+            if (response.ok && !err) return;
+            lastError = err || lastError;
+            if (/DaemonConfig not ready/i.test(err) && attempt < 5) {
+              await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
+              continue;
+            }
+            throw new Error(lastError);
           }
+          throw new Error(lastError);
         }
 
         async loadCandidatePortal() {

@@ -1,3 +1,4 @@
+import { Lifecycle } from '$static/lib/ts/Lifecycle.ts';
 import { getDigestPayload, submitDigestResponse } from './mailing-store.ts';
 
 const CORS_HEADERS = {
@@ -14,6 +15,18 @@ function json(data: unknown, status = 200): Response {
       ...CORS_HEADERS,
     },
   });
+}
+
+async function waitForConfig(timeoutMs = 10000): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      Lifecycle.getConfig();
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+  }
 }
 
 function digestFrom(url: URL, body?: Record<string, unknown>): string {
@@ -36,6 +49,7 @@ Deno.serve({ port: 0 }, async (request) => {
   }
 
   try {
+    await waitForConfig();
     if (request.method === 'GET') {
       const digest = digestFrom(url);
       const result = await getDigestPayload(digest);
