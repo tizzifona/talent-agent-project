@@ -13,7 +13,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="app.css?v=18">
+    <link rel="stylesheet" href="app.css?v=19">
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   </head>
   <body>
@@ -1730,40 +1730,24 @@ Do not invent employment_status. refugee_status is sensitive.`;
           if (!pane || !this.viewingPersonId) return;
           try {
             const result = await this.agentPost('/persons/communication', { id: this.viewingPersonId });
-            const sends = result.sends || [];
-            const tokens = result.tokens || [];
             const status = this.updateStatusLabel(result.info_update_status);
-            const replyText = (row) => {
-              const pending = (result.pending || []).find((item) => item.status === 'pending');
-              if (pending) return 'Pending reply';
-              return status;
-            };
-            const rows = sends.length
-              ? sends.map((item) => `
+            const messages = result.messages || [];
+            const rows = messages.length
+              ? messages.map((item) => `
                   <tr>
-                    <td>${escapeHtml(item.sent_at ? new Date(item.sent_at).toLocaleString() : '-')}</td>
+                    <td>${escapeHtml(item.date ? new Date(item.date).toLocaleString() : '-')}</td>
                     <td>${escapeHtml(item.subject || '-')}</td>
                     <td>${escapeHtml(item.campaign_id || '-')}</td>
-                    <td>Sent</td>
-                    <td>${escapeHtml(replyText(item))}</td>
+                    <td>${escapeHtml(item.sent || '-')}</td>
+                    <td><span class="status-pill ${escapeHtml(String(item.reply || 'No').toLowerCase().replace(/\s+/g, '_'))}">${escapeHtml(item.reply || 'No')}</span></td>
                   </tr>
                 `).join('')
-              : '';
-            const prepared = tokens.filter((item) => !sends.some((send) => send.campaign_id && send.campaign_id === item.campaign_id));
-            const extra = prepared.map((item) => `
-              <tr>
-                <td>${escapeHtml(item.created_at ? new Date(item.created_at).toLocaleString() : '-')}</td>
-                <td>Personal update link</td>
-                <td>${escapeHtml(item.campaign_id || '-')}</td>
-                <td>Prepared</td>
-                <td>${escapeHtml(replyText(item))}</td>
-              </tr>
-            `).join('');
+              : '<tr><td colspan="5">No mailings yet.</td></tr>';
             pane.innerHTML = `
               <p class="upload-hint">Profile update status: <strong>${escapeHtml(status)}</strong></p>
               <table class="pending-diff">
                 <thead><tr><th>Date</th><th>Subject</th><th>Campaign</th><th>Sent</th><th>Reply</th></tr></thead>
-                <tbody>${rows || extra ? `${rows}${extra}` : '<tr><td colspan="5">No mailings yet.</td></tr>'}</tbody>
+                <tbody>${rows}</tbody>
               </table>
             `;
           } catch (error) {

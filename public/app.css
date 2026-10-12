@@ -1123,6 +1123,15 @@ body.public-candidate #candidate-fields {
   border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
 }
 
+.status-pill.yes {
+  color: var(--teal);
+  border-color: color-mix(in srgb, var(--teal) 45%, var(--line));
+}
+
+.status-pill.no {
+  color: var(--text-muted);
+}
+
 .comment-item {
   padding: 12px 0;
   border-bottom: 1px solid var(--line);

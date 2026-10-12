@@ -30,6 +30,7 @@ import {
   renameTable,
 } from './table-store.ts';
 import {
+  enrichPeopleUpdateStatus,
   getTokenPayload,
   listCampaigns,
   listPendingUpdates,
@@ -217,13 +218,21 @@ Deno.serve({ port: 0 }, async (request) => {
 
     if (url.pathname.endsWith('/persons/query') && request.method === 'POST') {
       const body = await request.json();
-      return response({ ok: await queryPersons(body || {}) });
+      const result = await queryPersons(body || {});
+      return response({
+        ok: {
+          ...result,
+          records: await enrichPeopleUpdateStatus(result.records || []),
+        },
+      });
     }
 
     if (url.pathname.endsWith('/persons/get') && request.method === 'POST') {
       const body = await request.json();
       if (!body?.id) return response({ error: 'Person id required' });
-      return response({ ok: { record: await getPerson(body.id) } });
+      const record = await getPerson(body.id);
+      const enriched = record ? (await enrichPeopleUpdateStatus([record], true))[0] : null;
+      return response({ ok: { record: enriched } });
     }
 
     if (url.pathname.endsWith('/persons/create') && request.method === 'POST') {

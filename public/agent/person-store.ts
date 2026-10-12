@@ -136,6 +136,8 @@ const LIST_SELECT = [
   'seniority',
   'seniority_confidence',
   'review_status',
+  'info_update_status',
+  'update_digest',
   'suggested_merge_id',
   'merged_into',
 ];

@@ -710,30 +710,139 @@ export async function reviewPendingUpdate(
   return { pending: { id, ...next }, person: personResult };
 }
 
-export async function listPersonCommunication(personId: string): Promise<JsonMap> {
-  const person = await getPerson(personId);
-  if (!person) throw new Error('Person not found');
-  const sends = await listPersonSends(personId);
-  const pending = (await listPendingUpdates()).filter((row) => String(row.person_id) === String(personId));
-  let tokens: JsonMap[] = [];
+async function listMailingTokens(personId = ''): Promise<JsonMap[]> {
   try {
     const result = await structuredQuery(COLLECTIONS.mailingTokens, {
       type: TYPES.mailingToken,
-      filter: { person_id: personId },
+      filter: personId ? { person_id: personId } : {},
       select: ['*'],
       order: 'created-desc',
-      limit: 50,
+      limit: personId ? 80 : 300,
     });
-    tokens = result.records.map(unwrap).filter((row) => String(row.person_id || '') === String(personId));
+    const rows = result.records.map(unwrap);
+    return personId ? rows.filter((row) => String(row.person_id || '') === String(personId)) : rows;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!/not found/i.test(message)) throw error;
+    if (/not found/i.test(message)) return [];
+    throw error;
   }
+}
+
+function tokenWasReplied(token: JsonMap): boolean {
+  return Boolean(
+    token.used_at
+    || token.pending_id
+    || Number(token.reply_count || 0) > 0
+    || token.status === 'used',
+  );
+}
+
+function replyLabelFor(
+  token: JsonMap | undefined,
+  pendingRows: JsonMap[],
+  personStatus: string,
+): string {
+  const pendingRow = pendingRows.find((row) => {
+    if (!token) return false;
+    const tokenId = String(token.id || token.token || token.digest || '');
+    return String(row.token || '') === tokenId
+      || String(row.digest || '') === tokenId
+      || (row.campaign_id && token.campaign_id && String(row.campaign_id) === String(token.campaign_id));
+  });
+  const status = String(pendingRow?.status || '');
+  if (status === 'pending') return 'Pending';
+  if (status === 'approved') return pendingRow?.action === 'opt_out' ? 'Opted out' : 'Yes';
+  if (token && tokenWasReplied(token)) {
+    if (personStatus === 'updated') return 'Yes';
+    if (personStatus === 'opted_out') return 'Opted out';
+    return 'Pending';
+  }
+  return 'No';
+}
+
+export function deriveInfoUpdateStatus(
+  person: JsonMap,
+  pendingRows: JsonMap[],
+  tokens: JsonMap[],
+): string {
+  const personId = String(person.id || '');
+  const stored = String(person.info_update_status || '');
+  if (stored === 'opted_out' || person.opted_out) return 'opted_out';
+  const minePending = pendingRows.filter((row) => String(row.person_id || '') === personId);
+  if (minePending.some((row) => String(row.status || 'pending') === 'pending')) return 'pending';
+  if (minePending.some((row) => row.status === 'approved' && row.action === 'opt_out')) return 'opted_out';
+  if (minePending.some((row) => row.status === 'approved')) return 'updated';
+  if (stored === 'updated' || stored === 'pending') return stored;
+  const mineTokens = tokens.filter((row) => String(row.person_id || '') === personId);
+  if (mineTokens.some(tokenWasReplied)) return 'pending';
+  return stored || 'not_updated';
+}
+
+export async function enrichPeopleUpdateStatus(
+  records: JsonMap[],
+  persist = false,
+): Promise<JsonMap[]> {
+  if (!records.length) return records;
+  const pending = await listPendingUpdates();
+  const tokens = await listMailingTokens();
+  const next: JsonMap[] = [];
+  for (const person of records) {
+    const status = deriveInfoUpdateStatus(person, pending, tokens);
+    if (persist && status !== String(person.info_update_status || 'not_updated') && person.id) {
+      await patchPersonMeta(String(person.id), { info_update_status: status }).catch(() => null);
+    }
+    next.push({ ...person, info_update_status: status });
+  }
+  return next;
+}
+
+export async function listPersonCommunication(personId: string): Promise<JsonMap> {
+  const person = await getPerson(personId);
+  if (!person) throw new Error('Person not found');
+  const pending = (await listPendingUpdates()).filter((row) => String(row.person_id) === String(personId));
+  const tokens = await listMailingTokens(personId);
+  const sends = await listPersonSends(personId, String(person.primary_email || ''));
+  const status = deriveInfoUpdateStatus(person, pending, tokens);
+  if (status !== String(person.info_update_status || 'not_updated')) {
+    await patchPersonMeta(personId, { info_update_status: status }).catch(() => null);
+  }
+  const campaigns = await listCampaigns();
+  const subjects = Object.fromEntries(
+    campaigns.map((row) => [String(row.id), String(row.subject || '')]),
+  );
+  const messages: JsonMap[] = [];
+  const seen = new Set<string>();
+  for (const send of sends) {
+    const campaignId = String(send.campaign_id || '');
+    const token = tokens.find((row) => campaignId && String(row.campaign_id || '') === campaignId);
+    if (campaignId) seen.add(campaignId);
+    messages.push({
+      date: send.sent_at || send.created_at || '',
+      subject: send.subject || subjects[campaignId] || 'Mailing',
+      campaign_id: campaignId,
+      sent: 'Sent',
+      reply: replyLabelFor(token, pending, status),
+    });
+  }
+  for (const token of tokens) {
+    const campaignId = String(token.campaign_id || token.id || '');
+    if (campaignId && seen.has(campaignId)) continue;
+    if (campaignId) seen.add(campaignId);
+    messages.push({
+      date: token.created_at || token.used_at || '',
+      subject: subjects[String(token.campaign_id || '')] || 'Personal update link',
+      campaign_id: token.campaign_id || '',
+      sent: tokenWasReplied(token) ? 'Sent' : 'Prepared',
+      reply: replyLabelFor(token, pending, status),
+    });
+  }
+  messages.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   return {
     person_id: personId,
-    info_update_status: person.info_update_status || 'not_updated',
+    info_update_status: status,
     digest: person.update_digest || '',
     expires_at: person.update_link_expires_at || '',
+    messages,
     sends,
     tokens,
     pending,
