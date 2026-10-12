@@ -247,27 +247,31 @@ function unwrapSend(record: JsonMap): JsonMap {
   return { id: record.id, ...object };
 }
 
-export async function listPersonSends(personId: string): Promise<JsonMap[]> {
+export async function listPersonSends(personId: string, email = ''): Promise<JsonMap[]> {
   const id = String(personId || '');
-  if (!id) return [];
-  const match = (rows: JsonMap[]) => rows.filter((row) => String(row.person_id || '') === id);
+  const emailNorm = String(email || '').trim().toLowerCase();
+  if (!id && !emailNorm) return [];
+  const match = (rows: JsonMap[]) => rows.filter((row) => {
+    if (id && String(row.person_id || '') === id) return true;
+    if (emailNorm && String(row.email || '').trim().toLowerCase() === emailNorm) return true;
+    return false;
+  });
+  const found = new Map<string, JsonMap>();
+  const add = (rows: JsonMap[]) => {
+    for (const row of match(rows)) found.set(String(row.id || `${row.email}-${row.sent_at}`), row);
+  };
   try {
     const result = await structuredQuery(COLLECTIONS.mailSends, {
       type: TYPES.mailSend,
-      filter: { person_id: id },
+      filter: id ? { person_id: id } : {},
       select: ['*'],
       order: 'created-desc',
       limit: 100,
     });
-    const rows = match(result.records.map(unwrapSend));
-    if (rows.length) return rows;
+    add(result.records.map(unwrapSend));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!/not found/i.test(message)) {
-      // Fall through to an unfiltered query.
-    } else {
-      return [];
-    }
+    if (!/not found/i.test(message)) throw error;
   }
   try {
     const result = await structuredQuery(COLLECTIONS.mailSends, {
@@ -276,12 +280,12 @@ export async function listPersonSends(personId: string): Promise<JsonMap[]> {
       order: 'created-desc',
       limit: 200,
     });
-    return match(result.records.map(unwrapSend));
+    add(result.records.map(unwrapSend));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (/not found/i.test(message)) return [];
-    throw error;
+    if (!/not found/i.test(message)) throw error;
   }
+  return [...found.values()].sort((a, b) => String(b.sent_at || '').localeCompare(String(a.sent_at || '')));
 }
 
 function relaxDenoEnv(): void {
