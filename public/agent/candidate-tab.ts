@@ -17,18 +17,6 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-async function waitForConfig(timeoutMs = 20000): Promise<void> {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    try {
-      Lifecycle.getConfig();
-      return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    }
-  }
-}
-
 function digestFrom(url: URL, body?: Record<string, unknown>): string {
   const parts = url.pathname.split('/').filter(Boolean);
   const last = parts[parts.length - 1] || '';
@@ -43,13 +31,15 @@ function digestFrom(url: URL, body?: Record<string, unknown>): string {
 }
 
 Deno.serve({ port: 0 }, async (request) => {
+  if (Lifecycle.shouldHandle(request)) {
+    return Lifecycle.getInstance().handler(request);
+  }
   const url = new URL(request.url);
   if (request.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
 
   try {
-    await waitForConfig();
     if (request.method === 'GET') {
       const digest = digestFrom(url);
       const result = await getDigestPayload(digest);
