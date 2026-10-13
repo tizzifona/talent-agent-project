@@ -3,7 +3,8 @@
   "specifiers": {
     "jsr:@deno/installer-shell-setup@*": "0.3.4",
     "jsr:@std/assert@^1.0.19": "1.0.19",
-    "jsr:@std/internal@^1.0.12": "1.0.14"
+    "jsr:@std/internal@^1.0.12": "1.0.14",
+    "npm:nodemailer@6.10.1": "6.10.1"
   },
   "jsr": {
     "@deno/installer-shell-setup@0.3.4": {
@@ -18,6 +19,20 @@
     "@std/internal@1.0.14": {
       "integrity": "291516b3d4c35024d6ffbc0a9df5bf4c64116e05b50012cf846710152d2ffdf7"
     }
+  },
+  "npm": {
+    "nodemailer@6.10.1": {
+      "integrity": "sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA=="
+    }
+  },
+  "remote": {
+    "https://webdaemon.online/latest/static/lib/js/Storage.js": "acd8d2f1eea5abef0a803ed80f4a90488c8c3231d4f088ddd36ec0393634b551",
+    "https://webdaemon.online/latest/static/lib/js/Token.js": "24a6515e2426cd8144f5b74312ddb244417aeed23bd6d33abd70e30ef8a6e9fd",
+    "https://webdaemon.online/latest/static/lib/ts/Assertions.ts": "b0164a04132fb6d6e759f4cb6f1993a1eac5d9130883436ccb8df1183b999252",
+    "https://webdaemon.online/latest/static/lib/ts/HtmlContent.ts": "995782d07ff9e4bd6ec94af1afb292988e46c4b22658ded91e3419ae4c6477c0",
+    "https://webdaemon.online/latest/static/lib/ts/Lifecycle.ts": "c7c5c6819c271478111068f218b4e9e63cfe1196c679fd6ae9d9137a8e19c6a7",
+    "https://webdaemon.online/latest/static/lib/ts/Responses.ts": "71a1d65297ca6fef487ce53b401e7bb539730b52b82e1808fbd4a65fd42e664b",
+    "https://webdaemon.online/latest/static/lib/ts/YamlContent.ts": "fde9efbecce1e3dc075fb051c2c430ae9683504aeddae356acda243ce1c51dc5"
   },
   "workspace": {
     "dependencies": [
